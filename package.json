@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm rebuild better-sqlite3 && next build",
     "start": "next start -p ${PORT:-3000}",
     "lint": "next lint"
   },

@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "github.com" },
     ],
   },
+  serverExternalPackages: ["better-sqlite3"],
 };
 
 export default nextConfig;
