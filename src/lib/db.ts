@@ -1,22 +1,48 @@
-import Database from "better-sqlite3";
+import initSqlJs, { Database as SqlJsDatabase } from "sql.js";
+import fs from "fs";
 import path from "path";
 
 const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), "pimpmygit.db");
 
-let db: Database.Database;
+let db: SqlJsDatabase;
+let dbReady: Promise<void>;
 
-function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
-    initTables(db);
+function ensureDb(): Promise<void> {
+  if (!dbReady) {
+    dbReady = (async () => {
+      const SQL = await initSqlJs();
+      try {
+        const dir = path.dirname(DB_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (fs.existsSync(DB_PATH)) {
+          const buf = fs.readFileSync(DB_PATH);
+          db = new SQL.Database(buf);
+        } else {
+          db = new SQL.Database();
+        }
+      } catch {
+        db = new SQL.Database();
+      }
+      initTables();
+    })();
   }
-  return db;
+  return dbReady;
 }
 
-function initTables(db: Database.Database) {
-  db.exec(`
+function save() {
+  try {
+    const data = db.export();
+    const buffer = Buffer.from(data);
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DB_PATH, buffer);
+  } catch (e) {
+    console.error("DB save error:", e);
+  }
+}
+
+function initTables() {
+  db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       github_id TEXT UNIQUE NOT NULL,
@@ -25,7 +51,8 @@ function initTables(db: Database.Database) {
       credits INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
+  `);
+  db.run(`
     CREATE TABLE IF NOT EXISTS repos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       github_url TEXT UNIQUE NOT NULL,
@@ -40,7 +67,8 @@ function initTables(db: Database.Database) {
       upvote_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
+  `);
+  db.run(`
     CREATE TABLE IF NOT EXISTS votes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),
@@ -49,36 +77,63 @@ function initTables(db: Database.Database) {
       UNIQUE(user_id, repo_id)
     );
   `);
+  save();
+}
+
+// Helper: run query returning rows as objects
+function queryAll(sql: string, params: (string | number)[] = []): Record<string, unknown>[] {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  const rows: Record<string, unknown>[] = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return rows;
+}
+
+function queryOne(sql: string, params: (string | number)[] = []): Record<string, unknown> | undefined {
+  const rows = queryAll(sql, params);
+  return rows[0];
+}
+
+function runSql(sql: string, params: (string | number)[] = []) {
+  db.run(sql, params);
+  save();
 }
 
 // --- User queries ---
 
-export function upsertUser(githubId: string, username: string, avatarUrl: string) {
-  const db = getDb();
-  const existing = db.prepare("SELECT id FROM users WHERE github_id = ?").get(githubId) as { id: number } | undefined;
+export async function upsertUser(githubId: string, username: string, avatarUrl: string) {
+  await ensureDb();
+  const existing = queryOne("SELECT id FROM users WHERE github_id = ?", [githubId]);
   if (existing) {
-    db.prepare("UPDATE users SET username = ?, avatar_url = ? WHERE github_id = ?").run(username, avatarUrl, githubId);
-    return existing.id;
+    runSql("UPDATE users SET username = ?, avatar_url = ? WHERE github_id = ?", [username, avatarUrl, githubId]);
+    return existing.id as number;
   }
-  const result = db.prepare("INSERT INTO users (github_id, username, avatar_url) VALUES (?, ?, ?)").run(githubId, username, avatarUrl);
-  return result.lastInsertRowid as number;
+  runSql("INSERT INTO users (github_id, username, avatar_url) VALUES (?, ?, ?)", [githubId, username, avatarUrl]);
+  const row = queryOne("SELECT last_insert_rowid() as id");
+  return (row?.id as number) || 0;
 }
 
-export function getUserByGithubId(githubId: string) {
-  return getDb().prepare("SELECT * FROM users WHERE github_id = ?").get(githubId) as DbUser | undefined;
+export async function getUserByGithubId(githubId: string) {
+  await ensureDb();
+  return queryOne("SELECT * FROM users WHERE github_id = ?", [githubId]) as DbUser | undefined;
 }
 
-export function getUserById(id: number) {
-  return getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as DbUser | undefined;
+export async function getUserById(id: number) {
+  await ensureDb();
+  return queryOne("SELECT * FROM users WHERE id = ?", [id]) as DbUser | undefined;
 }
 
-export function addCredits(userId: number, amount: number) {
-  getDb().prepare("UPDATE users SET credits = credits + ? WHERE id = ?").run(amount, userId);
+export async function addCredits(userId: number, amount: number) {
+  await ensureDb();
+  runSql("UPDATE users SET credits = credits + ? WHERE id = ?", [amount, userId]);
 }
 
 // --- Repo queries ---
 
-export function createRepo(data: {
+export async function createRepo(data: {
   github_url: string;
   owner: string;
   name: string;
@@ -88,22 +143,24 @@ export function createRepo(data: {
   avatar_url: string;
   submitted_by: number;
 }) {
-  const db = getDb();
-  const existing = db.prepare("SELECT id FROM repos WHERE github_url = ?").get(data.github_url);
-  if (existing) return null; // already submitted
-  const result = db.prepare(
-    "INSERT INTO repos (github_url, owner, name, description, stars, language, avatar_url, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(data.github_url, data.owner, data.name, data.description, data.stars, data.language, data.avatar_url, data.submitted_by);
-  return result.lastInsertRowid as number;
+  await ensureDb();
+  const existing = queryOne("SELECT id FROM repos WHERE github_url = ?", [data.github_url]);
+  if (existing) return null;
+  runSql(
+    "INSERT INTO repos (github_url, owner, name, description, stars, language, avatar_url, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [data.github_url, data.owner, data.name, data.description, data.stars, data.language, data.avatar_url, data.submitted_by]
+  );
+  const row = queryOne("SELECT last_insert_rowid() as id");
+  return (row?.id as number) || 0;
 }
 
-export function getRepos(options: {
+export async function getRepos(options: {
   sort?: "trending" | "new" | "top";
   search?: string;
   limit?: number;
   offset?: number;
 }) {
-  const db = getDb();
+  await ensureDb();
   const { sort = "trending", search, limit = 30, offset = 0 } = options;
 
   let where = "";
@@ -129,7 +186,6 @@ export function getRepos(options: {
       break;
   }
 
-  // Boosted repos appear first (if boost_until > now)
   const sql = `
     SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar
     FROM repos r
@@ -142,64 +198,68 @@ export function getRepos(options: {
   `;
   params.push(limit, offset);
 
-  return db.prepare(sql).all(...params) as DbRepo[];
+  return queryAll(sql, params) as unknown as DbRepo[];
 }
 
-export function getRepoById(id: number) {
-  return getDb().prepare(`
+export async function getRepoById(id: number) {
+  await ensureDb();
+  return queryOne(`
     SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar
     FROM repos r
     LEFT JOIN users u ON r.submitted_by = u.id
     WHERE r.id = ?
-  `).get(id) as DbRepo | undefined;
+  `, [id]) as DbRepo | undefined;
 }
 
-export function getReposByUser(userId: number) {
-  return getDb().prepare(`
+export async function getReposByUser(userId: number) {
+  await ensureDb();
+  return queryAll(`
     SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar
     FROM repos r
     LEFT JOIN users u ON r.submitted_by = u.id
     WHERE r.submitted_by = ?
     ORDER BY r.created_at DESC
-  `).all(userId) as DbRepo[];
+  `, [userId]) as unknown as DbRepo[];
 }
 
 // --- Vote queries ---
 
-export function toggleVote(userId: number, repoId: number): boolean {
-  const db = getDb();
-  const existing = db.prepare("SELECT id FROM votes WHERE user_id = ? AND repo_id = ?").get(userId, repoId);
+export async function toggleVote(userId: number, repoId: number): Promise<boolean> {
+  await ensureDb();
+  const existing = queryOne("SELECT id FROM votes WHERE user_id = ? AND repo_id = ?", [userId, repoId]);
 
   if (existing) {
-    db.prepare("DELETE FROM votes WHERE user_id = ? AND repo_id = ?").run(userId, repoId);
-    db.prepare("UPDATE repos SET upvote_count = upvote_count - 1 WHERE id = ?").run(repoId);
-    return false; // unvoted
+    runSql("DELETE FROM votes WHERE user_id = ? AND repo_id = ?", [userId, repoId]);
+    runSql("UPDATE repos SET upvote_count = upvote_count - 1 WHERE id = ?", [repoId]);
+    return false;
   } else {
-    db.prepare("INSERT INTO votes (user_id, repo_id) VALUES (?, ?)").run(userId, repoId);
-    db.prepare("UPDATE repos SET upvote_count = upvote_count + 1 WHERE id = ?").run(repoId);
-    return true; // voted
+    runSql("INSERT INTO votes (user_id, repo_id) VALUES (?, ?)", [userId, repoId]);
+    runSql("UPDATE repos SET upvote_count = upvote_count + 1 WHERE id = ?", [repoId]);
+    return true;
   }
 }
 
-export function hasVoted(userId: number, repoId: number): boolean {
-  const result = getDb().prepare("SELECT id FROM votes WHERE user_id = ? AND repo_id = ?").get(userId, repoId);
+export async function hasVoted(userId: number, repoId: number): Promise<boolean> {
+  await ensureDb();
+  const result = queryOne("SELECT id FROM votes WHERE user_id = ? AND repo_id = ?", [userId, repoId]);
   return !!result;
 }
 
-export function getUserVotes(userId: number): number[] {
-  const rows = getDb().prepare("SELECT repo_id FROM votes WHERE user_id = ?").all(userId) as { repo_id: number }[];
-  return rows.map((r) => r.repo_id);
+export async function getUserVotes(userId: number): Promise<number[]> {
+  await ensureDb();
+  const rows = queryAll("SELECT repo_id FROM votes WHERE user_id = ?", [userId]);
+  return rows.map((r) => r.repo_id as number);
 }
 
 // --- Boost queries ---
 
-export function boostRepo(userId: number, repoId: number, hours: number = 24): boolean {
-  const db = getDb();
-  const user = getUserById(userId);
+export async function boostRepo(userId: number, repoId: number, hours: number = 24): Promise<boolean> {
+  await ensureDb();
+  const user = await getUserById(userId);
   if (!user || user.credits < 10) return false;
 
-  db.prepare("UPDATE users SET credits = credits - 10 WHERE id = ?").run(userId);
-  db.prepare("UPDATE repos SET boost_until = datetime('now', '+' || ? || ' hours') WHERE id = ?").run(hours, repoId);
+  runSql("UPDATE users SET credits = credits - 10 WHERE id = ?", [userId]);
+  runSql("UPDATE repos SET boost_until = datetime('now', '+' || ? || ' hours') WHERE id = ?", [hours, repoId]);
   return true;
 }
 

@@ -14,13 +14,13 @@ export async function POST(
 
   const { id } = await params;
   const repoId = parseInt(id);
-  const repo = getRepoById(repoId);
+  const repo = await getRepoById(repoId);
   if (!repo) {
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
   }
 
-  const voted = toggleVote(session.userId, repoId);
-  const updatedRepo = getRepoById(repoId);
+  const voted = await toggleVote(session.userId, repoId);
+  const updatedRepo = await getRepoById(repoId);
 
   return NextResponse.json({
     voted,

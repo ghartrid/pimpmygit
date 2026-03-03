@@ -14,17 +14,17 @@ export async function POST(
 
   const { id } = await params;
   const repoId = parseInt(id);
-  const repo = getRepoById(repoId);
+  const repo = await getRepoById(repoId);
   if (!repo) {
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
   }
 
-  const success = boostRepo(session.userId, repoId);
+  const success = await boostRepo(session.userId, repoId);
   if (!success) {
     return NextResponse.json({ error: "Not enough credits (need 10)" }, { status: 400 });
   }
 
-  const user = getUserById(session.userId);
+  const user = await getUserById(session.userId);
   return NextResponse.json({
     success: true,
     credits: user?.credits ?? 0,

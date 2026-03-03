@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Mock payment — just add credits
-  addCredits(session.userId, pkg.credits);
-  const user = getUserById(session.userId);
+  await addCredits(session.userId, pkg.credits);
+  const user = await getUserById(session.userId);
 
   return NextResponse.json({
     success: true,

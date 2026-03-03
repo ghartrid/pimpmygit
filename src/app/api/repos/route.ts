@@ -11,13 +11,13 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") || "30"), 100);
   const offset = parseInt(searchParams.get("offset") || "0");
 
-  const repos = getRepos({ sort, search, limit, offset });
+  const repos = await getRepos({ sort, search, limit, offset });
 
   // Attach user vote status if logged in
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   let votedRepoIds: number[] = [];
   if (session?.userId) {
-    votedRepoIds = getUserVotes(session.userId);
+    votedRepoIds = await getUserVotes(session.userId);
   }
 
   const reposWithVoteStatus = repos.map((r) => ({
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Repository not found on GitHub" }, { status: 404 });
   }
 
-  const id = createRepo({
+  const id = await createRepo({
     github_url: repoData.html_url,
     owner: repoData.owner,
     name: repoData.name,

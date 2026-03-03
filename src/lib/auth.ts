@@ -13,7 +13,7 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       if (account?.provider === "github" && profile) {
         const ghProfile = profile as { login?: string; avatar_url?: string; id?: number };
-        upsertUser(
+        await upsertUser(
           String(ghProfile.id || account.providerAccountId),
           ghProfile.login || user.name || "unknown",
           ghProfile.avatar_url || user.image || ""
@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token.sub) {
-        const dbUser = getUserByGithubId(token.sub);
+        const dbUser = await getUserByGithubId(token.sub);
         if (dbUser) {
           (session as ExtendedSession).userId = dbUser.id;
           (session as ExtendedSession).credits = dbUser.credits;
