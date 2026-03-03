@@ -6,6 +6,9 @@ import { Navbar } from "@/components/Navbar";
 export const metadata: Metadata = {
   title: "PimpMyGit - Discover & Promote GitHub Repos",
   description: "Upvote the best GitHub repositories. Boost yours for more exposure.",
+  verification: {
+    google: "iRJE4BUO9NQZIU12VHPxyzQ8WDmx-wOgabKmDUvDVWo",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
