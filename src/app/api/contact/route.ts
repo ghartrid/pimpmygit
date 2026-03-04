@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createContactMessage } from "@/lib/db";
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { name, email, message, captchaToken } = body;
+
+  // Validate fields
+  if (!name || !email || !message || !captchaToken) {
+    return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+  }
+  if (typeof name !== "string" || name.length > 100) {
+    return NextResponse.json({ error: "Name too long" }, { status: 400 });
+  }
+  if (typeof email !== "string" || email.length > 200 || !email.includes("@")) {
+    return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+  }
+  if (typeof message !== "string" || message.length > 2000) {
+    return NextResponse.json({ error: "Message too long (max 2000 chars)" }, { status: 400 });
+  }
+
+  // Verify hCaptcha token
+  const secret = process.env.HCAPTCHA_SECRET_KEY;
+  if (!secret) {
+    return NextResponse.json({ error: "Contact form unavailable" }, { status: 500 });
+  }
+
+  const verifyRes = await fetch("https://api.hcaptcha.com/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      secret,
+      response: captchaToken,
+    }),
+  });
+  const verifyData = await verifyRes.json();
+
+  if (!verifyData.success) {
+    return NextResponse.json({ error: "CAPTCHA verification failed" }, { status: 400 });
+  }
+
+  // Store message
+  await createContactMessage(
+    name.trim().slice(0, 100),
+    email.trim().slice(0, 200),
+    message.trim().slice(0, 2000)
+  );
+
+  return NextResponse.json({ success: true });
+}

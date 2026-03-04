@@ -87,6 +87,15 @@ function initTables() {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
   save();
 }
 
@@ -294,6 +303,18 @@ export async function capturePaypalOrder(orderId: string): Promise<{ packageId: 
   const changes = db.getRowsModified();
   if (changes === 0) return null; // Race condition: another request already captured
   return { packageId: order.package_id as string, userId: order.user_id as number };
+}
+
+// --- Contact queries ---
+
+export async function createContactMessage(name: string, email: string, message: string) {
+  await ensureDb();
+  runSql("INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)", [name, email, message]);
+}
+
+export async function getContactMessages() {
+  await ensureDb();
+  return queryAll("SELECT * FROM contact_messages ORDER BY created_at DESC");
 }
 
 // --- Types ---

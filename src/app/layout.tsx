@@ -34,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <Navbar />
           <main className="max-w-6xl mx-auto px-4 py-8 pb-20 sm:pb-8">{children}</main>
+          <footer className="hidden sm:block border-t text-center py-4 text-xs" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+            <a href="/contact" style={{ color: "var(--text-muted)" }}>Contact</a>
+          </footer>
         </Providers>
       </body>
     </html>
