@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession, signIn } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,14 @@ export default function ProfilePage() {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/paypal/client-id")
+      .then((res) => res.json())
+      .then((data) => setPaypalClientId(data.clientId))
+      .catch(() => setPaypalClientId(""));
+  }, []);
 
   if (status === "unauthenticated") {
     return (
@@ -77,69 +85,79 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <PayPalScriptProvider
-        options={{
-          clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "",
-          currency: "USD",
-        }}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          {PACKAGES.map((pkg) => (
-            <div
-              key={pkg.id}
-              className="rounded-xl border p-4 text-center"
-              style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
-            >
-              <div className="text-3xl font-bold mb-1" style={{ color: "var(--gold)" }}>
-                {pkg.credits}
-              </div>
-              <div className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>
-                credits &middot; {pkg.price}
-              </div>
-              <PayPalButtons
-                style={{
-                  layout: "vertical",
-                  shape: "rect",
-                  label: "pay",
-                  height: 35,
-                }}
-                createOrder={async () => {
-                  const res = await fetch("/api/paypal/create-order", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ package: pkg.id }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) throw new Error(data.error);
-                  return data.id;
-                }}
-                onApprove={async (data) => {
-                  setMessage("");
-                  const res = await fetch("/api/paypal/capture-order", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ orderID: data.orderID, package: pkg.id }),
-                  });
-                  const result = await res.json();
-                  if (res.ok) {
-                    setMessageType("success");
-                    setMessage(`Purchased ${result.purchased} credits! New balance: ${result.credits}`);
-                    await update();
-                    router.refresh();
-                  } else {
-                    setMessageType("error");
-                    setMessage(result.error || "Payment failed");
-                  }
-                }}
-                onError={() => {
-                  setMessageType("error");
-                  setMessage("Payment was cancelled or failed");
-                }}
-              />
-            </div>
-          ))}
+      {paypalClientId === null ? (
+        <div className="text-center py-8" style={{ color: "var(--text-muted)" }}>
+          Loading payment options...
         </div>
-      </PayPalScriptProvider>
+      ) : paypalClientId === "" ? (
+        <div className="text-center py-8" style={{ color: "var(--red)" }}>
+          Payment system unavailable. Please try again later.
+        </div>
+      ) : (
+        <PayPalScriptProvider
+          options={{
+            clientId: paypalClientId,
+            currency: "USD",
+          }}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {PACKAGES.map((pkg) => (
+              <div
+                key={pkg.id}
+                className="rounded-xl border p-4 text-center"
+                style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+              >
+                <div className="text-3xl font-bold mb-1" style={{ color: "var(--gold)" }}>
+                  {pkg.credits}
+                </div>
+                <div className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>
+                  credits &middot; {pkg.price}
+                </div>
+                <PayPalButtons
+                  style={{
+                    layout: "vertical",
+                    shape: "rect",
+                    label: "pay",
+                    height: 35,
+                  }}
+                  createOrder={async () => {
+                    const res = await fetch("/api/paypal/create-order", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ package: pkg.id }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    return data.id;
+                  }}
+                  onApprove={async (data) => {
+                    setMessage("");
+                    const res = await fetch("/api/paypal/capture-order", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ orderID: data.orderID, package: pkg.id }),
+                    });
+                    const result = await res.json();
+                    if (res.ok) {
+                      setMessageType("success");
+                      setMessage(`Purchased ${result.purchased} credits! New balance: ${result.credits}`);
+                      await update();
+                      router.refresh();
+                    } else {
+                      setMessageType("error");
+                      setMessage(result.error || "Payment failed");
+                    }
+                  }}
+                  onError={() => {
+                    setMessageType("error");
+                    setMessage("Payment was cancelled or failed");
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </PayPalScriptProvider>
+      )}
 
       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
         <p>Credits are used to boost repositories (10 credits = 24h boost).</p>
