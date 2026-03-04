@@ -313,6 +313,11 @@ export async function createContactMessage(name: string, email: string, message:
   runSql("INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)", [name, email, message]);
 }
 
+export async function getContactMessages(): Promise<{ id: number; name: string; email: string; message: string; created_at: string }[]> {
+  await ensureDb();
+  return queryAll("SELECT id, name, email, message, created_at FROM contact_messages ORDER BY id DESC LIMIT 50") as { id: number; name: string; email: string; message: string; created_at: string }[];
+}
+
 // --- Types ---
 
 export interface DbUser {
