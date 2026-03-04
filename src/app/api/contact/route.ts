@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { createContactMessage } from "@/lib/db";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -58,16 +58,10 @@ export async function POST(req: NextRequest) {
 
   // Send email notification
   try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-    });
-    await transporter.sendMail({
-      from: `"PimpMyGit Contact" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "PimpMyGit <onboarding@resend.dev>",
+      to: "ghartrid@gmail.com",
       replyTo: trimmedEmail,
       subject: `[PimpMyGit] Message from ${trimmedName}`,
       text: `Name: ${trimmedName}\nEmail: ${trimmedEmail}\n\n${trimmedMessage}`,
