@@ -80,6 +80,40 @@ export function Navbar() {
           )}
         </div>
       </div>
+
+      {/* Mobile bottom nav */}
+      <div
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-14 border-t"
+        style={{ borderColor: "var(--border)", background: "rgba(13,17,23,0.98)" }}
+      >
+        <Link href="/" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
+          <span className="text-lg">&#9733;</span>
+          Explore
+        </Link>
+        <Link href="/leaderboard" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
+          <span className="text-lg">&#9650;</span>
+          Top
+        </Link>
+        {status === "authenticated" ? (
+          <Link href="/submit" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--green)" }}>
+            <span className="text-lg">+</span>
+            Submit
+          </Link>
+        ) : (
+          <button
+            onClick={() => signIn("github")}
+            className="flex flex-col items-center gap-0.5 text-xs cursor-pointer"
+            style={{ color: "var(--accent)", background: "none", border: "none" }}
+          >
+            <span className="text-lg">+</span>
+            Submit
+          </button>
+        )}
+        <Link href="/profile" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
+          <span className="text-lg">&#9679;</span>
+          Profile
+        </Link>
+      </div>
     </nav>
   );
 }

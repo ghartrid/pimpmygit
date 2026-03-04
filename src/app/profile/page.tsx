@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession, signIn } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 const PACKAGES = [
   { id: "small", credits: 10, price: "$5" },
@@ -15,30 +16,8 @@ export default function ProfilePage() {
   const { data: session, status, update } = useSession();
   const ext = session as Record<string, unknown> | null;
   const router = useRouter();
-  const [buying, setBuying] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-
-  async function buyCredits(packageId: string) {
-    setBuying(packageId);
-    setMessage("");
-    try {
-      const res = await fetch("/api/credits/buy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ package: packageId }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage(`Purchased ${data.purchased} credits! New balance: ${data.credits}`);
-        await update(); // Refresh session
-        router.refresh();
-      } else {
-        setMessage(data.error || "Purchase failed");
-      }
-    } finally {
-      setBuying(null);
-    }
-  }
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
 
   if (status === "unauthenticated") {
     return (
@@ -85,47 +64,86 @@ export default function ProfilePage() {
 
       {/* Buy credits */}
       <h2 className="text-lg font-bold mb-4">Buy Credits</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        {PACKAGES.map((pkg) => (
-          <div
-            key={pkg.id}
-            className="rounded-xl border p-4 text-center"
-            style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
-          >
-            <div className="text-3xl font-bold mb-1" style={{ color: "var(--gold)" }}>
-              {pkg.credits}
-            </div>
-            <div className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>
-              credits
-            </div>
-            <button
-              onClick={() => buyCredits(pkg.id)}
-              disabled={buying !== null}
-              className="w-full py-2 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#fff", border: "none" }}
-            >
-              {buying === pkg.id ? "Processing..." : `Buy for ${pkg.price}`}
-            </button>
-          </div>
-        ))}
-      </div>
 
       {message && (
         <div
-          className="mb-6 px-4 py-2 rounded-lg text-sm"
+          className="mb-4 px-4 py-2 rounded-lg text-sm"
           style={{
-            background: message.includes("!") ? "rgba(63,185,80,0.1)" : "rgba(248,81,73,0.1)",
-            color: message.includes("!") ? "var(--green)" : "var(--red)",
+            background: messageType === "success" ? "rgba(63,185,80,0.1)" : "rgba(248,81,73,0.1)",
+            color: messageType === "success" ? "var(--green)" : "var(--red)",
           }}
         >
           {message}
         </div>
       )}
 
+      <PayPalScriptProvider
+        options={{
+          clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "",
+          currency: "USD",
+        }}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {PACKAGES.map((pkg) => (
+            <div
+              key={pkg.id}
+              className="rounded-xl border p-4 text-center"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+            >
+              <div className="text-3xl font-bold mb-1" style={{ color: "var(--gold)" }}>
+                {pkg.credits}
+              </div>
+              <div className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>
+                credits &middot; {pkg.price}
+              </div>
+              <PayPalButtons
+                style={{
+                  layout: "vertical",
+                  shape: "rect",
+                  label: "pay",
+                  height: 35,
+                }}
+                createOrder={async () => {
+                  const res = await fetch("/api/paypal/create-order", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ package: pkg.id }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error);
+                  return data.id;
+                }}
+                onApprove={async (data) => {
+                  setMessage("");
+                  const res = await fetch("/api/paypal/capture-order", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderID: data.orderID, package: pkg.id }),
+                  });
+                  const result = await res.json();
+                  if (res.ok) {
+                    setMessageType("success");
+                    setMessage(`Purchased ${result.purchased} credits! New balance: ${result.credits}`);
+                    await update();
+                    router.refresh();
+                  } else {
+                    setMessageType("error");
+                    setMessage(result.error || "Payment failed");
+                  }
+                }}
+                onError={() => {
+                  setMessageType("error");
+                  setMessage("Payment was cancelled or failed");
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </PayPalScriptProvider>
+
       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
         <p>Credits are used to boost repositories (10 credits = 24h boost).</p>
         <p className="mt-1">Boosted repos appear at the top of all listings with a Promoted badge.</p>
-        <p className="mt-1 italic">Note: This is a demo. No real charges are made.</p>
       </div>
     </div>
   );
