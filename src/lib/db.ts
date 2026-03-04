@@ -77,6 +77,16 @@ function initTables() {
       UNIQUE(user_id, repo_id)
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS paypal_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      package_id TEXT NOT NULL,
+      status TEXT DEFAULT 'created',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
   save();
 }
 
@@ -167,8 +177,9 @@ export async function getRepos(options: {
   const params: (string | number)[] = [];
 
   if (search) {
-    where = "WHERE (r.name LIKE ? OR r.description LIKE ? OR r.owner LIKE ?)";
-    const term = `%${search}%`;
+    const sanitized = search.slice(0, 200).replace(/[%_]/g, "\\$&");
+    where = "WHERE (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\' OR r.owner LIKE ? ESCAPE '\\')";
+    const term = `%${sanitized}%`;
     params.push(term, term, term);
   }
 
@@ -230,11 +241,13 @@ export async function toggleVote(userId: number, repoId: number): Promise<boolea
 
   if (existing) {
     runSql("DELETE FROM votes WHERE user_id = ? AND repo_id = ?", [userId, repoId]);
-    runSql("UPDATE repos SET upvote_count = upvote_count - 1 WHERE id = ?", [repoId]);
+    // Sync count from actual votes to prevent desync
+    runSql("UPDATE repos SET upvote_count = (SELECT COUNT(*) FROM votes WHERE repo_id = ?) WHERE id = ?", [repoId, repoId]);
     return false;
   } else {
-    runSql("INSERT INTO votes (user_id, repo_id) VALUES (?, ?)", [userId, repoId]);
-    runSql("UPDATE repos SET upvote_count = upvote_count + 1 WHERE id = ?", [repoId]);
+    db.run("INSERT OR IGNORE INTO votes (user_id, repo_id) VALUES (?, ?)", [userId, repoId]);
+    if (db.getRowsModified() === 0) return true; // Already voted (race condition)
+    runSql("UPDATE repos SET upvote_count = (SELECT COUNT(*) FROM votes WHERE repo_id = ?) WHERE id = ?", [repoId, repoId]);
     return true;
   }
 }
@@ -253,14 +266,34 @@ export async function getUserVotes(userId: number): Promise<number[]> {
 
 // --- Boost queries ---
 
-export async function boostRepo(userId: number, repoId: number, hours: number = 24): Promise<boolean> {
+export async function boostRepo(userId: number, repoId: number): Promise<boolean> {
   await ensureDb();
-  const user = await getUserById(userId);
-  if (!user || user.credits < 10) return false;
-
-  runSql("UPDATE users SET credits = credits - 10 WHERE id = ?", [userId]);
-  runSql("UPDATE repos SET boost_until = datetime('now', '+' || ? || ' hours') WHERE id = ?", [hours, repoId]);
+  // Atomic: only deduct if credits >= 10, prevents negative balance race condition
+  db.run("UPDATE users SET credits = credits - 10 WHERE id = ? AND credits >= 10", [userId]);
+  const changes = db.getRowsModified();
+  if (changes === 0) return false;
+  runSql("UPDATE repos SET boost_until = datetime('now', '+24 hours') WHERE id = ?", [repoId]);
   return true;
+}
+
+// --- PayPal order queries ---
+
+export async function createPaypalOrder(orderId: string, userId: number, packageId: string) {
+  await ensureDb();
+  runSql("INSERT INTO paypal_orders (order_id, user_id, package_id) VALUES (?, ?, ?)", [orderId, userId, packageId]);
+}
+
+export async function capturePaypalOrder(orderId: string): Promise<{ packageId: string; userId: number } | null> {
+  await ensureDb();
+  const order = queryOne(
+    "SELECT package_id, user_id, status FROM paypal_orders WHERE order_id = ?",
+    [orderId]
+  );
+  if (!order || order.status !== "created") return null; // Already captured or doesn't exist
+  runSql("UPDATE paypal_orders SET status = 'captured' WHERE order_id = ? AND status = 'created'", [orderId]);
+  const changes = db.getRowsModified();
+  if (changes === 0) return null; // Race condition: another request already captured
+  return { packageId: order.package_id as string, userId: order.user_id as number };
 }
 
 // --- Types ---

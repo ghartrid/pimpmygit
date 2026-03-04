@@ -14,6 +14,9 @@ export async function POST(
 
   const { id } = await params;
   const repoId = parseInt(id);
+  if (!Number.isFinite(repoId) || repoId < 1) {
+    return NextResponse.json({ error: "Invalid repo ID" }, { status: 400 });
+  }
   const repo = await getRepoById(repoId);
   if (!repo) {
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });

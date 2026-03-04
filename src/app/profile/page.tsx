@@ -135,7 +135,7 @@ export default function ProfilePage() {
                     const res = await fetch("/api/paypal/capture-order", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ orderID: data.orderID, package: pkg.id }),
+                      body: JSON.stringify({ orderID: data.orderID }),
                     });
                     const result = await res.json();
                     if (res.ok) {

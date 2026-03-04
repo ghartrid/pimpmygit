@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
+import { createPaypalOrder } from "@/lib/db";
 
 const PACKAGES: Record<string, { credits: number; price: string }> = {
   small: { credits: 10, price: "5.00" },
@@ -19,6 +20,7 @@ async function getPayPalAccessToken(): Promise<string> {
     },
     body: "grant_type=client_credentials",
   });
+  if (!res.ok) throw new Error("PayPal auth failed");
   const data = await res.json();
   return data.access_token;
 }
@@ -36,7 +38,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid package" }, { status: 400 });
   }
 
-  const accessToken = await getPayPalAccessToken();
+  let accessToken: string;
+  try {
+    accessToken = await getPayPalAccessToken();
+  } catch {
+    return NextResponse.json({ error: "Payment service unavailable" }, { status: 503 });
+  }
 
   const orderRes = await fetch("https://api-m.paypal.com/v2/checkout/orders", {
     method: "POST",
@@ -61,9 +68,11 @@ export async function POST(req: NextRequest) {
   const order = await orderRes.json();
 
   if (!orderRes.ok) {
-    console.error("PayPal create order error:", order);
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
   }
+
+  // Store order-package binding server-side
+  await createPaypalOrder(order.id, session.userId, packageId);
 
   return NextResponse.json({ id: order.id });
 }

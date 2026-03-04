@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
-import { addCredits, getUserById } from "@/lib/db";
+import { addCredits, getUserById, capturePaypalOrder } from "@/lib/db";
 
 const PACKAGES: Record<string, { credits: number; price: string }> = {
   small: { credits: 10, price: "5.00" },
@@ -20,6 +20,7 @@ async function getPayPalAccessToken(): Promise<string> {
     },
     body: "grant_type=client_credentials",
   });
+  if (!res.ok) throw new Error("PayPal auth failed");
   const data = await res.json();
   return data.access_token;
 }
@@ -32,18 +33,34 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const orderID = body.orderID as string;
-  const packageId = body.package as string;
 
-  if (!orderID || !packageId) {
-    return NextResponse.json({ error: "Missing orderID or package" }, { status: 400 });
+  if (!orderID) {
+    return NextResponse.json({ error: "Missing orderID" }, { status: 400 });
   }
 
-  const pkg = PACKAGES[packageId];
+  // Look up order-package binding from DB (prevents client from choosing package)
+  // Also marks as captured atomically (prevents replay/double-credit)
+  const order = await capturePaypalOrder(orderID);
+  if (!order) {
+    return NextResponse.json({ error: "Order not found or already captured" }, { status: 400 });
+  }
+
+  // Verify the order belongs to this user
+  if (order.userId !== session.userId) {
+    return NextResponse.json({ error: "Order does not belong to you" }, { status: 403 });
+  }
+
+  const pkg = PACKAGES[order.packageId];
   if (!pkg) {
     return NextResponse.json({ error: "Invalid package" }, { status: 400 });
   }
 
-  const accessToken = await getPayPalAccessToken();
+  let accessToken: string;
+  try {
+    accessToken = await getPayPalAccessToken();
+  } catch {
+    return NextResponse.json({ error: "Payment service unavailable" }, { status: 503 });
+  }
 
   // Capture the payment
   const captureRes = await fetch(
@@ -60,7 +77,6 @@ export async function POST(req: NextRequest) {
   const captureData = await captureRes.json();
 
   if (!captureRes.ok || captureData.status !== "COMPLETED") {
-    console.error("PayPal capture error:", captureData);
     return NextResponse.json({ error: "Payment capture failed" }, { status: 500 });
   }
 
@@ -68,7 +84,6 @@ export async function POST(req: NextRequest) {
   const capture = captureData.purchase_units?.[0]?.payments?.captures?.[0];
   const capturedAmount = capture?.amount?.value;
   if (capturedAmount !== pkg.price) {
-    console.error("Amount mismatch:", capturedAmount, "vs", pkg.price);
     return NextResponse.json({ error: "Payment amount mismatch" }, { status: 400 });
   }
 

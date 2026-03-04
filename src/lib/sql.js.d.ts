@@ -7,6 +7,7 @@ declare module "sql.js" {
     run(sql: string, params?: (string | number | null)[]): Database;
     exec(sql: string): QueryExecResult[];
     prepare(sql: string): Statement;
+    getRowsModified(): number;
     export(): Uint8Array;
     close(): void;
   }
