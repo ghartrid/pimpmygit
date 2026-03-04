@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
 import { toggleVote, getRepoById } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   req: NextRequest,
@@ -10,6 +11,12 @@ export async function POST(
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Sign in to vote" }, { status: 401 });
+  }
+
+  // Rate limit: 30 votes per minute per user
+  const rl = rateLimit(`vote:${session.userId}`, 30, 60000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many votes. Slow down." }, { status: 429 });
   }
 
   const { id } = await params;

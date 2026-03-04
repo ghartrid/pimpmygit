@@ -80,11 +80,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Payment capture failed" }, { status: 500 });
   }
 
-  // Verify the captured amount matches the package price
+  // Verify the captured amount and currency match the package price
   const capture = captureData.purchase_units?.[0]?.payments?.captures?.[0];
-  const capturedAmount = capture?.amount?.value;
-  if (capturedAmount !== pkg.price) {
+  const capturedAmount = parseFloat(capture?.amount?.value);
+  const capturedCurrency = capture?.amount?.currency_code;
+  if (isNaN(capturedAmount) || capturedAmount !== parseFloat(pkg.price)) {
     return NextResponse.json({ error: "Payment amount mismatch" }, { status: 400 });
+  }
+  if (capturedCurrency !== "USD") {
+    return NextResponse.json({ error: "Invalid payment currency" }, { status: 400 });
   }
 
   // Payment verified — add credits

@@ -163,6 +163,7 @@ export async function createRepo(data: {
   submitted_by: number;
 }) {
   await ensureDb();
+  if (!data.github_url.startsWith("https://github.com/")) return null;
   const existing = queryOne("SELECT id FROM repos WHERE github_url = ?", [data.github_url]);
   if (existing) return null;
   runSql(
@@ -310,11 +311,6 @@ export async function capturePaypalOrder(orderId: string): Promise<{ packageId: 
 export async function createContactMessage(name: string, email: string, message: string) {
   await ensureDb();
   runSql("INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)", [name, email, message]);
-}
-
-export async function getContactMessages() {
-  await ensureDb();
-  return queryAll("SELECT * FROM contact_messages ORDER BY created_at DESC");
 }
 
 // --- Types ---

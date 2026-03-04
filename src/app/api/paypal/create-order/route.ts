@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
 import { createPaypalOrder } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 
 const PACKAGES: Record<string, { credits: number; price: string }> = {
   small: { credits: 10, price: "5.00" },
@@ -29,6 +30,12 @@ export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Sign in to buy credits" }, { status: 401 });
+  }
+
+  // Rate limit: 10 order attempts per hour per user
+  const rl = rateLimit(`paypal:${session.userId}`, 10, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many purchase attempts. Try again later." }, { status: 429 });
   }
 
   const body = await req.json();

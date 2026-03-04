@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createContactMessage } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 3 contact messages per hour per IP
+  const ip = getClientIp(req);
+  const rl = rateLimit(`contact:${ip}`, 3, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many messages. Try again later." }, { status: 429 });
+  }
+
   const body = await req.json();
   const { name, email, message, captchaToken } = body;
 
@@ -31,6 +39,7 @@ export async function POST(req: NextRequest) {
     body: new URLSearchParams({
       secret,
       response: captchaToken,
+      sitekey: process.env.HCAPTCHA_SITE_KEY || "",
     }),
   });
   const verifyData = await verifyRes.json();

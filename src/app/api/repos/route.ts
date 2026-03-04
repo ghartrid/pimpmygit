@@ -3,13 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
 import { getRepos, createRepo, getUserVotes } from "@/lib/db";
 import { parseGitHubUrl, fetchRepoData } from "@/lib/github";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const sort = (searchParams.get("sort") as "trending" | "new" | "top") || "trending";
   const search = searchParams.get("search") || undefined;
-  const limit = Math.min(parseInt(searchParams.get("limit") || "30"), 100);
-  const offset = parseInt(searchParams.get("offset") || "0");
+  const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
+  const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10)) || 0;
 
   const repos = await getRepos({ sort, search, limit, offset });
 
@@ -33,6 +34,12 @@ export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Sign in to submit repos" }, { status: 401 });
+  }
+
+  // Rate limit: 5 submissions per hour per user
+  const rl = rateLimit(`submit:${session.userId}`, 5, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many submissions. Try again later." }, { status: 429 });
   }
 
   const body = await req.json();
