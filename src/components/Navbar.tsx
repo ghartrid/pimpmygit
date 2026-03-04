@@ -15,9 +15,9 @@ export function Navbar() {
     >
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-xl font-bold flex items-center gap-2 no-underline hover:no-underline">
-            <span style={{ color: "var(--gold)" }}>&#9733;</span>
-            <span style={{ color: "var(--text)" }}>PimpMyGit</span>
+          <Link href="/" className="flex items-center gap-2 no-underline hover:no-underline">
+            <Image src="/logo-navbar.png" alt="PimpMyGit" width={32} height={32} />
+            <span className="text-xl font-bold" style={{ color: "var(--text)" }}>PimpMyGit</span>
           </Link>
           <div className="hidden sm:flex items-center gap-4 text-sm">
             <Link href="/" className="hover:no-underline" style={{ color: "var(--text-muted)" }}>
