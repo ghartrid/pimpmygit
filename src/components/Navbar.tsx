@@ -17,7 +17,7 @@ export function Navbar() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 no-underline hover:no-underline">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-navbar.png" alt="PimpMyGit" width={36} height={36} style={{ filter: "drop-shadow(0 0 4px rgba(255,215,0,0.5))" }} />
+            <img src="/logo-navbar.png" alt="PimpMyGit" width={36} height={36} className="flex-shrink-0" style={{ filter: "drop-shadow(0 0 4px rgba(255,215,0,0.5))", minWidth: 36, minHeight: 36 }} />
             <span className="text-xl font-bold" style={{ color: "var(--text)" }}>PimpMyGit</span>
           </Link>
           <div className="hidden sm:flex items-center gap-4 text-sm">
