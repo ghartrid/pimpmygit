@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -11,14 +10,54 @@ export default function ContactPage() {
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const captchaRef = useRef<HCaptcha>(null);
+  const captchaContainerRef = useRef<HTMLDivElement>(null);
+  const captchaWidgetId = useRef<string | null>(null);
+
+  const renderCaptcha = useCallback((key: string) => {
+    if (!captchaContainerRef.current) return;
+    const w = window as unknown as Record<string, unknown>;
+    const hcaptcha = w.hcaptcha as { render: (el: HTMLElement, opts: Record<string, unknown>) => string; reset: (id: string) => void } | undefined;
+    if (hcaptcha) {
+      captchaWidgetId.current = hcaptcha.render(captchaContainerRef.current, {
+        sitekey: key,
+        theme: "dark",
+        callback: (token: string) => setCaptchaToken(token),
+        "expired-callback": () => setCaptchaToken(""),
+      });
+      return;
+    }
+    // Load script if not already present
+    if (!document.getElementById("hcaptcha-script")) {
+      (w as Record<string, unknown>).hcaptchaOnLoad = () => {
+        const hc = (w as Record<string, unknown>).hcaptcha as { render: (el: HTMLElement, opts: Record<string, unknown>) => string };
+        if (hc && captchaContainerRef.current) {
+          captchaWidgetId.current = hc.render(captchaContainerRef.current, {
+            sitekey: key,
+            theme: "dark",
+            callback: (token: string) => setCaptchaToken(token),
+            "expired-callback": () => setCaptchaToken(""),
+          });
+        }
+      };
+      const script = document.createElement("script");
+      script.id = "hcaptcha-script";
+      script.src = "https://js.hcaptcha.com/1/api.js?onload=hcaptchaOnLoad&render=explicit";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/contact/captcha-key")
       .then((res) => res.json())
-      .then((data) => setSiteKey(data.siteKey))
+      .then((data) => setSiteKey(data.siteKey || ""))
       .catch(() => setSiteKey(""));
   }, []);
+
+  // Render captcha after siteKey is set and the container div is in the DOM
+  useEffect(() => {
+    if (siteKey) renderCaptcha(siteKey);
+  }, [siteKey, renderCaptcha]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +82,11 @@ export default function ContactPage() {
         setEmail("");
         setMessage("");
         setCaptchaToken("");
-        captchaRef.current?.resetCaptcha();
+        if (captchaWidgetId.current !== null) {
+          const w = window as unknown as Record<string, unknown>;
+          const hcaptcha = w.hcaptcha as { reset: (id: string) => void } | undefined;
+          hcaptcha?.reset(captchaWidgetId.current);
+        }
       } else {
         setErrorMsg(data.error || "Failed to send message");
         setStatus("error");
@@ -162,13 +205,7 @@ export default function ContactPage() {
                 CAPTCHA unavailable. Please try again later.
               </div>
             ) : (
-              <HCaptcha
-                sitekey={siteKey}
-                onVerify={(token) => setCaptchaToken(token)}
-                onExpire={() => setCaptchaToken("")}
-                ref={captchaRef}
-                theme="dark"
-              />
+              <div ref={captchaContainerRef} />
             )}
 
             <button
