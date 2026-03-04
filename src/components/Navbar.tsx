@@ -17,7 +17,7 @@ export function Navbar() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 no-underline hover:no-underline">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <span style={{ fontSize: 28, lineHeight: 1 }}>🎩</span>
+            <span style={{ color: "var(--gold)", fontSize: 24 }}>&#9733;</span>
             <span className="text-xl font-bold" style={{ color: "var(--text)" }}>PimpMyGit</span>
           </Link>
           <div className="hidden sm:flex items-center gap-4 text-sm">
@@ -88,8 +88,7 @@ export function Navbar() {
         style={{ borderColor: "var(--border)", background: "rgba(13,17,23,0.98)" }}
       >
         <Link href="/" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-navbar.png" alt="" width={20} height={20} />
+          <span className="text-lg">&#9733;</span>
           Explore
         </Link>
         <Link href="/leaderboard" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>

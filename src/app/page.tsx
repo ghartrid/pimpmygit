@@ -36,7 +36,9 @@ export default function Home() {
       {/* Hero */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold mb-2">
-          <span style={{ color: "var(--gold)" }}>&#9733;</span> Discover Amazing GitHub Repos
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-navbar.png" alt="" width={40} height={40} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 8 }} />
+          Discover Amazing GitHub Repos
         </h1>
         <p className="text-lg" style={{ color: "var(--text-muted)" }}>
           Submit, upvote, and boost the best open source projects
