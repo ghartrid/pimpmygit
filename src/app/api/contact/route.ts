@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 import { createContactMessage } from "@/lib/db";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -48,12 +49,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "CAPTCHA verification failed" }, { status: 400 });
   }
 
-  // Store message
-  await createContactMessage(
-    name.trim().slice(0, 100),
-    email.trim().slice(0, 200),
-    message.trim().slice(0, 2000)
-  );
+  const trimmedName = name.trim().slice(0, 100);
+  const trimmedEmail = email.trim().slice(0, 200);
+  const trimmedMessage = message.trim().slice(0, 2000);
+
+  // Store message in DB
+  await createContactMessage(trimmedName, trimmedEmail, trimmedMessage);
+
+  // Send email notification
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+    await transporter.sendMail({
+      from: `"PimpMyGit Contact" <${process.env.GMAIL_USER}>`,
+      to: process.env.GMAIL_USER,
+      replyTo: trimmedEmail,
+      subject: `[PimpMyGit] Message from ${trimmedName}`,
+      text: `Name: ${trimmedName}\nEmail: ${trimmedEmail}\n\n${trimmedMessage}`,
+    });
+  } catch {
+    // Email failed but message is stored in DB — don't fail the request
+  }
 
   return NextResponse.json({ success: true });
 }

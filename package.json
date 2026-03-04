@@ -21,6 +21,7 @@
     "@types/react-dom": "^19.2.3",
     "next": "^16.1.6",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.13",
     "postcss": "^8.5.8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -30,5 +31,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.11"
   }
 }
