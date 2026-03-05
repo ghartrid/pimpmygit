@@ -85,7 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 RSS
               </a>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex justify-center">
               <a
                 href="https://www.producthunt.com/products/pimpmygit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-pimpmygit"
                 target="_blank"
