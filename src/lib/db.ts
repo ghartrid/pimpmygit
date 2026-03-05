@@ -337,10 +337,10 @@ export async function boostRepo(userId: number, repoId: number, tier: string = "
   await ensureDb();
   const t = BOOST_TIERS[tier as keyof typeof BOOST_TIERS];
   if (!t) return false;
-  db.run(`UPDATE users SET credits = credits - ${t.credits} WHERE id = ? AND credits >= ${t.credits}`, [userId]);
+  db.run("UPDATE users SET credits = credits - ? WHERE id = ? AND credits >= ?", [t.credits, userId, t.credits]);
   const changes = db.getRowsModified();
   if (changes === 0) return false;
-  runSql(`UPDATE repos SET boost_until = datetime('now', '+${t.hours} hours'), boost_tier = ? WHERE id = ?`, [tier, repoId]);
+  runSql("UPDATE repos SET boost_until = datetime('now', '+' || ? || ' hours'), boost_tier = ? WHERE id = ?", [t.hours, tier, repoId]);
   return true;
 }
 
@@ -460,9 +460,12 @@ export async function getCommentsByRepo(repoId: number): Promise<DbComment[]> {
 
 export async function deleteComment(commentId: number, userId: number): Promise<boolean> {
   await ensureDb();
-  // Delete replies first, then the comment
-  runSql("DELETE FROM comments WHERE parent_id = ? AND user_id = ?", [commentId, userId]);
-  runSql("DELETE FROM comments WHERE id = ? AND user_id = ?", [commentId, userId]);
+  // Verify ownership first
+  const comment = queryOne("SELECT id FROM comments WHERE id = ? AND user_id = ?", [commentId, userId]);
+  if (!comment) return false;
+  // Delete all replies to this comment, then the comment itself
+  runSql("DELETE FROM comments WHERE parent_id = ?", [commentId]);
+  runSql("DELETE FROM comments WHERE id = ?", [commentId]);
   return db.getRowsModified() > 0;
 }
 
@@ -494,13 +497,14 @@ export async function getPublicCollections(limit: number = 30, offset: number = 
   `, [limit, offset]) as unknown as DbCollection[];
 }
 
-export async function getCollectionsByUser(userId: number): Promise<DbCollection[]> {
+export async function getCollectionsByUser(userId: number, includePrivate: boolean = false): Promise<DbCollection[]> {
   await ensureDb();
+  const publicFilter = includePrivate ? "" : " AND c.is_public = 1";
   return queryAll(`
     SELECT c.*,
       (SELECT COUNT(*) FROM collection_repos WHERE collection_id = c.id) as repo_count
     FROM collections c
-    WHERE c.user_id = ?
+    WHERE c.user_id = ?${publicFilter}
     ORDER BY c.created_at DESC
   `, [userId]) as unknown as DbCollection[];
 }
@@ -579,16 +583,23 @@ export async function createSponsoredSlot(repoId: number, userId: number, slot: 
   await ensureDb();
   const t = SPONSORED_TIERS[duration as keyof typeof SPONSORED_TIERS];
   if (!t || (slot !== 1 && slot !== 2)) return false;
-  // Check slot availability
-  const active = queryOne("SELECT id FROM sponsored_slots WHERE slot_position = ? AND ends_at > datetime('now')", [slot]);
-  if (active) return false;
-  // Deduct credits
-  db.run(`UPDATE users SET credits = credits - ${t.credits} WHERE id = ? AND credits >= ${t.credits}`, [userId]);
+  // Deduct credits atomically
+  db.run("UPDATE users SET credits = credits - ? WHERE id = ? AND credits >= ?", [t.credits, userId, t.credits]);
   if (db.getRowsModified() === 0) return false;
-  runSql(
-    `INSERT INTO sponsored_slots (repo_id, user_id, slot_position, ends_at) VALUES (?, ?, ?, datetime('now', '+${t.days} days'))`,
-    [repoId, userId, slot]
+  // Insert only if slot is not currently active (atomic check via WHERE NOT EXISTS)
+  db.run(
+    `INSERT INTO sponsored_slots (repo_id, user_id, slot_position, ends_at)
+     SELECT ?, ?, ?, datetime('now', '+' || ? || ' days')
+     WHERE NOT EXISTS (SELECT 1 FROM sponsored_slots WHERE slot_position = ? AND ends_at > datetime('now'))`,
+    [repoId, userId, slot, t.days, slot]
   );
+  if (db.getRowsModified() === 0) {
+    // Slot was taken — refund credits
+    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [t.credits, userId]);
+    save();
+    return false;
+  }
+  save();
   return true;
 }
 
@@ -623,6 +634,30 @@ export async function getReposCount(options: { search?: string; language?: strin
   }
   const row = queryOne(`SELECT COUNT(*) as count FROM repos r ${where}`, params);
   return (row?.count as number) || 0;
+}
+
+// --- Sitemap queries ---
+
+export async function getAllRepoIds(): Promise<{ id: number; created_at: string }[]> {
+  await ensureDb();
+  return queryAll("SELECT id, created_at FROM repos ORDER BY id ASC") as unknown as { id: number; created_at: string }[];
+}
+
+export async function getPublicCollectionIds(): Promise<{ id: number; created_at: string }[]> {
+  await ensureDb();
+  return queryAll("SELECT id, created_at FROM collections WHERE is_public = 1 ORDER BY id ASC") as unknown as { id: number; created_at: string }[];
+}
+
+// --- Stats refresh ---
+
+export async function updateRepoStats(id: number, stars: number, description: string, language: string) {
+  await ensureDb();
+  runSql("UPDATE repos SET stars = ?, description = ?, language = ? WHERE id = ?", [stars, description, language, id]);
+}
+
+export async function getAllRepos(): Promise<{ id: number; owner: string; name: string }[]> {
+  await ensureDb();
+  return queryAll("SELECT id, owner, name FROM repos ORDER BY id ASC") as unknown as { id: number; owner: string; name: string }[];
 }
 
 // --- Types ---

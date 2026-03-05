@@ -4,6 +4,7 @@ import { Providers } from "@/components/Providers";
 import { Navbar } from "@/components/Navbar";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pimpmygit.com"),
   title: "PimpMyGit - Discover & Promote GitHub Repos",
   description: "Upvote the best GitHub repositories. Boost yours for more exposure.",
   verification: {
@@ -35,6 +36,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`,
+          }}
+        />
         <link rel="alternate" type="application/rss+xml" title="PimpMyGit - Trending Repos" href="/feed.xml" />
         <script
           async

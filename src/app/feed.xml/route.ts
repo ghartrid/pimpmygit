@@ -4,15 +4,16 @@ import { getRepos } from "@/lib/db";
 export async function GET() {
   const repos = await getRepos({ sort: "trending", limit: 30 });
 
+  function escXml(s: string) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
   const items = repos
     .map((r) => {
       const pubDate = new Date(r.created_at + "Z").toUTCString();
-      const desc = (r.description || "No description")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const desc = escXml(r.description || "No description");
       return `    <item>
-      <title>${r.owner}/${r.name}</title>
+      <title>${escXml(r.owner)}/${escXml(r.name)}</title>
       <link>https://pimpmygit.com/repo/${r.id}</link>
       <description>${desc} | ${r.stars} stars | ${r.language || "Unknown"} | ${r.upvote_count} votes</description>
       <pubDate>${pubDate}</pubDate>

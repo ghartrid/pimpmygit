@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
 import { addRepoToCollection, removeRepoFromCollection } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   req: NextRequest,
@@ -10,6 +11,11 @@ export async function POST(
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const rl = rateLimit(`collection-repos:${session.userId}`, 30, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const { id } = await params;
@@ -36,6 +42,11 @@ export async function DELETE(
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const rl = rateLimit(`collection-repos-del:${session.userId}`, 30, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const { id } = await params;

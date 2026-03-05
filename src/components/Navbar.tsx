@@ -3,6 +3,7 @@
 import { useSession, signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Navbar() {
   const { data: session, status } = useSession();
@@ -11,7 +12,7 @@ export function Navbar() {
   return (
     <nav
       className="border-b sticky top-0 z-50 backdrop-blur-sm"
-      style={{ borderColor: "var(--border)", background: "rgba(13,17,23,0.95)" }}
+      style={{ borderColor: "var(--border)", background: "var(--nav-bg)" }}
     >
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-6">
@@ -42,6 +43,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           {status === "authenticated" && ext ? (
             <>
               <Link
@@ -91,7 +93,7 @@ export function Navbar() {
       {/* Mobile bottom nav */}
       <div
         className="sm:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-14 border-t"
-        style={{ borderColor: "var(--border)", background: "rgba(13,17,23,0.98)" }}
+        style={{ borderColor: "var(--border)", background: "var(--nav-bg)" }}
       >
         <Link href="/" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
           <span className="text-lg">&#9733;</span>

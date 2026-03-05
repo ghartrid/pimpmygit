@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
 import { deleteComment } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function DELETE(
   _req: NextRequest,
@@ -10,6 +11,11 @@ export async function DELETE(
   const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   if (!session?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const rl = rateLimit(`comment-delete:${session.userId}`, 20, 3600000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const { commentId } = await params;

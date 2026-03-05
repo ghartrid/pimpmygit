@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { RepoCard } from "@/components/RepoCard";
 
 type SortMode = "trending" | "new" | "top";
+const PAGE_SIZE = 20;
 
 export default function Home() {
   const [repos, setRepos] = useState<RepoCardData[]>([]);
@@ -11,6 +12,10 @@ export default function Home() {
   const [sort, setSort] = useState<SortMode>("trending");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/sponsored")
@@ -19,19 +24,52 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  const fetchRepos = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams({ sort });
+  const fetchRepos = useCallback(async (append = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      offsetRef.current = 0;
+    }
+    const params = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: String(offsetRef.current) });
     if (search) params.set("search", search);
     const res = await fetch(`/api/repos?${params}`);
     const data = await res.json();
-    setRepos(data.repos || []);
+    const newRepos = data.repos || [];
+    if (append) {
+      setRepos((prev) => [...prev, ...newRepos]);
+    } else {
+      setRepos(newRepos);
+    }
+    setHasMore(newRepos.length >= PAGE_SIZE);
+    offsetRef.current += newRepos.length;
     setLoading(false);
+    setLoadingMore(false);
   }, [sort, search]);
 
+  // Initial load + reset on sort/search change
   useEffect(() => {
-    fetchRepos();
+    setHasMore(true);
+    fetchRepos(false);
   }, [fetchRepos]);
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchRepos(true);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, fetchRepos]);
 
   const sortTabs: { key: SortMode; label: string }[] = [
     { key: "trending", label: "Trending" },
@@ -120,6 +158,19 @@ export default function Home() {
           {repos.map((repo) => (
             <RepoCard key={repo.id} repo={repo} />
           ))}
+        </div>
+      )}
+
+      {/* Infinite scroll sentinel */}
+      <div ref={sentinelRef} className="h-1" />
+      {loadingMore && (
+        <div className="text-center py-6" style={{ color: "var(--text-muted)" }}>
+          Loading more...
+        </div>
+      )}
+      {!hasMore && repos.length > 0 && (
+        <div className="text-center py-6 text-sm" style={{ color: "var(--text-muted)" }}>
+          You&apos;ve reached the end
         </div>
       )}
     </div>

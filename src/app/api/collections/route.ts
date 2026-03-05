@@ -5,11 +5,14 @@ import { getPublicCollections, getCollectionsByUser, createCollection } from "@/
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("user");
 
   if (userId) {
-    const collections = await getCollectionsByUser(parseInt(userId, 10));
+    const uid = parseInt(userId, 10);
+    const isOwner = session?.userId === uid;
+    const collections = await getCollectionsByUser(uid, isOwner);
     return NextResponse.json({ collections });
   }
 
