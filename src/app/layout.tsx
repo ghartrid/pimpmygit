@@ -54,8 +54,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <Navbar />
           <main className="max-w-6xl mx-auto px-4 py-8 pb-20 sm:pb-8">{children}</main>
-          <footer className="hidden sm:block border-t text-center py-4 text-xs" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-            <a href="/contact" style={{ color: "var(--text-muted)" }}>Contact</a>
+          <footer className="hidden sm:block border-t text-center py-6" style={{ borderColor: "var(--border)" }}>
+            <a
+              href="/contact"
+              className="inline-block px-6 py-2.5 rounded-lg font-medium text-sm no-underline hover:no-underline"
+              style={{ background: "var(--accent)", color: "#fff" }}
+            >
+              &#9993; Contact Us
+            </a>
           </footer>
         </Providers>
       </body>

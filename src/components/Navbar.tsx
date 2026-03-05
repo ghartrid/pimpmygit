@@ -110,9 +110,9 @@ export function Navbar() {
             Submit
           </button>
         )}
-        <Link href="/contact" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
-          <span className="text-lg">&#9993;</span>
-          Contact
+        <Link href="/contact" className="flex flex-col items-center gap-0.5 no-underline" style={{ color: "var(--accent)" }}>
+          <span className="text-xl">&#9993;</span>
+          <span className="text-xs font-medium">Contact</span>
         </Link>
         <Link href="/profile" className="flex flex-col items-center gap-0.5 text-xs no-underline" style={{ color: "var(--text-muted)" }}>
           <span className="text-lg">&#9679;</span>
