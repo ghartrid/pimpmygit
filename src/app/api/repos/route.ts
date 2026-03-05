@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
-import { getRepos, createRepo, getUserVotes } from "@/lib/db";
+import { getRepos, getReposByUser, createRepo, getUserVotes } from "@/lib/db";
 import { parseGitHubUrl, fetchRepoData } from "@/lib/github";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+  const mine = searchParams.get("mine");
+  const session = (await getServerSession(authOptions)) as ExtendedSession | null;
+
+  // Return user's own repos
+  if (mine === "1") {
+    if (!session?.userId) {
+      return NextResponse.json({ repos: [] });
+    }
+    const repos = await getReposByUser(session.userId);
+    return NextResponse.json({ repos });
+  }
+
   const sort = (searchParams.get("sort") as "trending" | "new" | "top") || "trending";
   const search = searchParams.get("search") || undefined;
   const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
@@ -15,7 +27,6 @@ export async function GET(req: NextRequest) {
   const repos = await getRepos({ sort, search, limit, offset });
 
   // Attach user vote status if logged in
-  const session = (await getServerSession(authOptions)) as ExtendedSession | null;
   let votedRepoIds: number[] = [];
   if (session?.userId) {
     votedRepoIds = await getUserVotes(session.userId);

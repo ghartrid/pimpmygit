@@ -306,6 +306,42 @@ export async function capturePaypalOrder(orderId: string): Promise<{ packageId: 
   return { packageId: order.package_id as string, userId: order.user_id as number };
 }
 
+// --- Delete queries ---
+
+export async function deleteRepo(repoId: number, userId: number): Promise<boolean> {
+  await ensureDb();
+  // Only the submitter can delete their repo
+  const repo = queryOne("SELECT id FROM repos WHERE id = ? AND submitted_by = ?", [repoId, userId]);
+  if (!repo) return false;
+  runSql("DELETE FROM votes WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM repos WHERE id = ? AND submitted_by = ?", [repoId, userId]);
+  return db.getRowsModified() > 0;
+}
+
+export async function deleteUser(userId: number): Promise<boolean> {
+  await ensureDb();
+  const user = queryOne("SELECT id FROM users WHERE id = ?", [userId]);
+  if (!user) return false;
+  // Delete user's votes
+  runSql("DELETE FROM votes WHERE user_id = ?", [userId]);
+  // Recalculate upvote counts for affected repos
+  const repos = queryAll("SELECT id FROM repos", []);
+  for (const r of repos) {
+    runSql("UPDATE repos SET upvote_count = (SELECT COUNT(*) FROM votes WHERE repo_id = ?) WHERE id = ?", [r.id as number, r.id as number]);
+  }
+  // Delete user's repos and their votes
+  const userRepos = queryAll("SELECT id FROM repos WHERE submitted_by = ?", [userId]);
+  for (const r of userRepos) {
+    runSql("DELETE FROM votes WHERE repo_id = ?", [r.id as number]);
+  }
+  runSql("DELETE FROM repos WHERE submitted_by = ?", [userId]);
+  // Delete paypal orders
+  runSql("DELETE FROM paypal_orders WHERE user_id = ?", [userId]);
+  // Delete user
+  runSql("DELETE FROM users WHERE id = ?", [userId]);
+  return true;
+}
+
 // --- Contact queries ---
 
 export async function createContactMessage(name: string, email: string, message: string) {

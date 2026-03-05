@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession, signIn } from "next-auth/react";
+import { useState, useEffect, useCallback } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+
+interface UserRepo {
+  id: number;
+  name: string;
+  owner: string;
+  description: string;
+  upvote_count: number;
+  created_at: string;
+}
 
 const PACKAGES = [
   { id: "small", credits: 10, price: "$5" },
@@ -19,6 +29,20 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
+  const [myRepos, setMyRepos] = useState<UserRepo[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(true);
+  const [deletingRepo, setDeletingRepo] = useState<number | null>(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const fetchMyRepos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/repos?mine=1");
+      const data = await res.json();
+      setMyRepos(data.repos || []);
+    } catch { /* ignore */ }
+    setLoadingRepos(false);
+  }, []);
 
   useEffect(() => {
     fetch("/api/paypal/client-id")
@@ -26,6 +50,51 @@ export default function ProfilePage() {
       .then((data) => setPaypalClientId(data.clientId))
       .catch(() => setPaypalClientId(""));
   }, []);
+
+  useEffect(() => {
+    if (status === "authenticated") fetchMyRepos();
+  }, [status, fetchMyRepos]);
+
+  const handleDeleteRepo = async (repoId: number) => {
+    if (!confirm("Are you sure you want to delete this repo? This cannot be undone.")) return;
+    setDeletingRepo(repoId);
+    try {
+      const res = await fetch(`/api/repos/${repoId}/delete`, { method: "DELETE" });
+      if (res.ok) {
+        setMyRepos((prev) => prev.filter((r) => r.id !== repoId));
+        setMessageType("success");
+        setMessage("Repo deleted successfully");
+      } else {
+        const data = await res.json();
+        setMessageType("error");
+        setMessage(data.error || "Failed to delete repo");
+      }
+    } catch {
+      setMessageType("error");
+      setMessage("Network error");
+    }
+    setDeletingRepo(null);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm("Are you sure? This will permanently delete your account, all your repos, votes, and credits. This CANNOT be undone.")) return;
+    setDeletingAccount(true);
+    try {
+      const res = await fetch("/api/account/delete", { method: "DELETE" });
+      if (res.ok) {
+        await signOut({ callbackUrl: "/" });
+      } else {
+        const data = await res.json();
+        setMessageType("error");
+        setMessage(data.error || "Failed to delete account");
+        setDeletingAccount(false);
+      }
+    } catch {
+      setMessageType("error");
+      setMessage("Network error");
+      setDeletingAccount(false);
+    }
+  };
 
   if (status === "unauthenticated") {
     return (
@@ -159,9 +228,113 @@ export default function ProfilePage() {
         </PayPalScriptProvider>
       )}
 
-      <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="text-xs mb-8" style={{ color: "var(--text-muted)" }}>
         <p>Credits are used to boost repositories (10 credits = 24h boost).</p>
         <p className="mt-1">Boosted repos appear at the top of all listings with a Promoted badge.</p>
+      </div>
+
+      {/* My Repos */}
+      <h2 className="text-lg font-bold mb-4">My Repos</h2>
+      {loadingRepos ? (
+        <div className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>Loading repos...</div>
+      ) : myRepos.length === 0 ? (
+        <div
+          className="rounded-xl border p-6 text-center mb-8"
+          style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+        >
+          <p className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>You haven&apos;t submitted any repos yet.</p>
+          <Link
+            href="/submit"
+            className="inline-block px-4 py-2 rounded-lg text-sm font-medium no-underline"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            + Submit a Repo
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-3 mb-8">
+          {myRepos.map((repo) => (
+            <div
+              key={repo.id}
+              className="rounded-xl border p-4 flex items-center justify-between"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+            >
+              <div className="flex-1 min-w-0">
+                <Link
+                  href={`/repo/${repo.id}`}
+                  className="font-medium text-sm no-underline hover:underline"
+                  style={{ color: "var(--text)" }}
+                >
+                  {repo.owner}/{repo.name}
+                </Link>
+                <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  {repo.upvote_count} upvotes &middot; {new Date(repo.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeleteRepo(repo.id)}
+                disabled={deletingRepo === repo.id}
+                className="ml-3 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                style={{
+                  background: "rgba(248,81,73,0.1)",
+                  color: "var(--red)",
+                  border: "1px solid rgba(248,81,73,0.3)",
+                  opacity: deletingRepo === repo.id ? 0.5 : 1,
+                }}
+              >
+                {deletingRepo === repo.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Delete Account */}
+      <div
+        className="rounded-xl border p-6 mt-8"
+        style={{ background: "var(--bg-card)", borderColor: "rgba(248,81,73,0.3)" }}
+      >
+        <h2 className="text-lg font-bold mb-2" style={{ color: "var(--red)" }}>Danger Zone</h2>
+        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+          Permanently delete your account, all your submitted repos, votes, and credits.
+          This action cannot be undone.
+        </p>
+        {!showDeleteAccount ? (
+          <button
+            onClick={() => setShowDeleteAccount(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+            style={{
+              background: "transparent",
+              color: "var(--red)",
+              border: "1px solid rgba(248,81,73,0.5)",
+            }}
+          >
+            Delete My Account
+          </button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleDeleteAccount}
+              disabled={deletingAccount}
+              className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+              style={{
+                background: "var(--red)",
+                color: "#fff",
+                border: "none",
+                opacity: deletingAccount ? 0.5 : 1,
+              }}
+            >
+              {deletingAccount ? "Deleting..." : "Yes, Delete Everything"}
+            </button>
+            <button
+              onClick={() => setShowDeleteAccount(false)}
+              className="px-4 py-2 rounded-lg text-sm cursor-pointer"
+              style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
