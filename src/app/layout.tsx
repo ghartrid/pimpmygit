@@ -85,6 +85,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 RSS
               </a>
             </div>
+            <div className="mt-4">
+              <a
+                href="https://www.producthunt.com/products/pimpmygit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-pimpmygit"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt="PimpMyGit - The Missing Front Page for Github | Product Hunt"
+                  width={250}
+                  height={54}
+                  src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1090929&theme=light&t=1772747609395"
+                />
+              </a>
+            </div>
           </footer>
         </Providers>
       </body>
