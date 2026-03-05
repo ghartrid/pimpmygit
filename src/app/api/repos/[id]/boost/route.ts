@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, ExtendedSession } from "@/lib/auth";
-import { boostRepo, getRepoById, getUserById } from "@/lib/db";
+import { boostRepo, getRepoById, getUserById, BOOST_TIERS } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
@@ -29,9 +29,16 @@ export async function POST(
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
   }
 
-  const success = await boostRepo(session.userId, repoId);
+  const body = await req.json().catch(() => ({}));
+  const tier = (body.tier as string) || "basic";
+  if (!(tier in BOOST_TIERS)) {
+    return NextResponse.json({ error: "Invalid boost tier" }, { status: 400 });
+  }
+  const tierInfo = BOOST_TIERS[tier as keyof typeof BOOST_TIERS];
+
+  const success = await boostRepo(session.userId, repoId, tier);
   if (!success) {
-    return NextResponse.json({ error: "Not enough credits (need 10)" }, { status: 400 });
+    return NextResponse.json({ error: `Not enough credits (need ${tierInfo.credits})` }, { status: 400 });
   }
 
   const user = await getUserById(session.userId);

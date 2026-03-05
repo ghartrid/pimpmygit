@@ -21,10 +21,11 @@ export async function GET(req: NextRequest) {
 
   const sort = (searchParams.get("sort") as "trending" | "new" | "top") || "trending";
   const search = searchParams.get("search") || undefined;
+  const language = searchParams.get("language") || undefined;
   const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
   const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10)) || 0;
 
-  const repos = await getRepos({ sort, search, limit, offset });
+  const repos = await getRepos({ sort, search, language, limit, offset });
 
   // Attach user vote status if logged in
   let votedRepoIds: number[] = [];

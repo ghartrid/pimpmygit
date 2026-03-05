@@ -96,6 +96,50 @@ function initTables() {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      parent_id INTEGER REFERENCES comments(id),
+      body TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      is_public INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS collection_repos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      collection_id INTEGER NOT NULL REFERENCES collections(id),
+      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      added_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(collection_id, repo_id)
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sponsored_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id INTEGER NOT NULL REFERENCES repos(id),
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      slot_position INTEGER NOT NULL,
+      starts_at TEXT DEFAULT (datetime('now')),
+      ends_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  // Add boost_tier column to repos if not exists
+  try {
+    db.run("ALTER TABLE repos ADD COLUMN boost_tier TEXT DEFAULT ''");
+  } catch { /* column already exists */ }
   save();
 }
 
@@ -177,20 +221,26 @@ export async function createRepo(data: {
 export async function getRepos(options: {
   sort?: "trending" | "new" | "top";
   search?: string;
+  language?: string;
   limit?: number;
   offset?: number;
 }) {
   await ensureDb();
-  const { sort = "trending", search, limit = 30, offset = 0 } = options;
+  const { sort = "trending", search, language, limit = 30, offset = 0 } = options;
 
-  let where = "";
+  let where = "WHERE 1=1";
   const params: (string | number)[] = [];
 
   if (search) {
     const sanitized = search.slice(0, 200).replace(/[%_]/g, "\\$&");
-    where = "WHERE (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\' OR r.owner LIKE ? ESCAPE '\\')";
+    where += " AND (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\' OR r.owner LIKE ? ESCAPE '\\')";
     const term = `%${sanitized}%`;
     params.push(term, term, term);
+  }
+
+  if (language) {
+    where += " AND r.language = ?";
+    params.push(language);
   }
 
   let orderBy: string;
@@ -208,7 +258,8 @@ export async function getRepos(options: {
   }
 
   const sql = `
-    SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar
+    SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar,
+      (SELECT COUNT(*) FROM comments WHERE comments.repo_id = r.id) as comment_count
     FROM repos r
     LEFT JOIN users u ON r.submitted_by = u.id
     ${where}
@@ -276,13 +327,20 @@ export async function getUserVotes(userId: number): Promise<number[]> {
 
 // --- Boost queries ---
 
-export async function boostRepo(userId: number, repoId: number): Promise<boolean> {
+export const BOOST_TIERS = {
+  basic:   { credits: 10, hours: 24, label: "24h" },
+  plus:    { credits: 25, hours: 72, label: "3 days" },
+  premium: { credits: 50, hours: 168, label: "7 days" },
+} as const;
+
+export async function boostRepo(userId: number, repoId: number, tier: string = "basic"): Promise<boolean> {
   await ensureDb();
-  // Atomic: only deduct if credits >= 10, prevents negative balance race condition
-  db.run("UPDATE users SET credits = credits - 10 WHERE id = ? AND credits >= 10", [userId]);
+  const t = BOOST_TIERS[tier as keyof typeof BOOST_TIERS];
+  if (!t) return false;
+  db.run(`UPDATE users SET credits = credits - ${t.credits} WHERE id = ? AND credits >= ${t.credits}`, [userId]);
   const changes = db.getRowsModified();
   if (changes === 0) return false;
-  runSql("UPDATE repos SET boost_until = datetime('now', '+24 hours') WHERE id = ?", [repoId]);
+  runSql(`UPDATE repos SET boost_until = datetime('now', '+${t.hours} hours'), boost_tier = ? WHERE id = ?`, [tier, repoId]);
   return true;
 }
 
@@ -313,6 +371,8 @@ export async function deleteRepo(repoId: number, userId: number): Promise<boolea
   // Only the submitter can delete their repo
   const repo = queryOne("SELECT id FROM repos WHERE id = ? AND submitted_by = ?", [repoId, userId]);
   if (!repo) return false;
+  runSql("DELETE FROM comments WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM collection_repos WHERE repo_id = ?", [repoId]);
   runSql("DELETE FROM votes WHERE repo_id = ?", [repoId]);
   runSql("DELETE FROM repos WHERE id = ? AND submitted_by = ?", [repoId, userId]);
   return db.getRowsModified() > 0;
@@ -329,12 +389,24 @@ export async function deleteUser(userId: number): Promise<boolean> {
   for (const r of repos) {
     runSql("UPDATE repos SET upvote_count = (SELECT COUNT(*) FROM votes WHERE repo_id = ?) WHERE id = ?", [r.id as number, r.id as number]);
   }
-  // Delete user's repos and their votes
+  // Delete user's comments
+  runSql("DELETE FROM comments WHERE user_id = ?", [userId]);
+  // Delete user's collections
+  const userCollections = queryAll("SELECT id FROM collections WHERE user_id = ?", [userId]);
+  for (const c of userCollections) {
+    runSql("DELETE FROM collection_repos WHERE collection_id = ?", [c.id as number]);
+  }
+  runSql("DELETE FROM collections WHERE user_id = ?", [userId]);
+  // Delete user's repos and their votes/comments/collection refs
   const userRepos = queryAll("SELECT id FROM repos WHERE submitted_by = ?", [userId]);
   for (const r of userRepos) {
+    runSql("DELETE FROM comments WHERE repo_id = ?", [r.id as number]);
+    runSql("DELETE FROM collection_repos WHERE repo_id = ?", [r.id as number]);
     runSql("DELETE FROM votes WHERE repo_id = ?", [r.id as number]);
   }
   runSql("DELETE FROM repos WHERE submitted_by = ?", [userId]);
+  // Delete sponsored slots
+  runSql("DELETE FROM sponsored_slots WHERE user_id = ?", [userId]);
   // Delete paypal orders
   runSql("DELETE FROM paypal_orders WHERE user_id = ?", [userId]);
   // Delete user
@@ -352,6 +424,205 @@ export async function createContactMessage(name: string, email: string, message:
 export async function getContactMessages(): Promise<{ id: number; name: string; email: string; message: string; created_at: string }[]> {
   await ensureDb();
   return queryAll("SELECT id, name, email, message, created_at FROM contact_messages ORDER BY id DESC LIMIT 50") as { id: number; name: string; email: string; message: string; created_at: string }[];
+}
+
+// --- Comment queries ---
+
+export async function createComment(repoId: number, userId: number, body: string, parentId?: number): Promise<number> {
+  await ensureDb();
+  if (parentId) {
+    const parent = queryOne("SELECT id, parent_id FROM comments WHERE id = ? AND repo_id = ?", [parentId, repoId]);
+    if (!parent || parent.parent_id !== null) return 0; // Only allow 1-level replies
+  }
+  if (parentId) {
+    runSql(
+      "INSERT INTO comments (repo_id, user_id, parent_id, body) VALUES (?, ?, ?, ?)",
+      [repoId, userId, parentId, body]
+    );
+  } else {
+    db.run("INSERT INTO comments (repo_id, user_id, body) VALUES (?, ?, ?)", [repoId, userId, body]);
+    save();
+  }
+  const row = queryOne("SELECT last_insert_rowid() as id");
+  return (row?.id as number) || 0;
+}
+
+export async function getCommentsByRepo(repoId: number): Promise<DbComment[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT c.*, u.username, u.avatar_url as user_avatar
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.repo_id = ?
+    ORDER BY c.created_at ASC
+  `, [repoId]) as unknown as DbComment[];
+}
+
+export async function deleteComment(commentId: number, userId: number): Promise<boolean> {
+  await ensureDb();
+  // Delete replies first, then the comment
+  runSql("DELETE FROM comments WHERE parent_id = ? AND user_id = ?", [commentId, userId]);
+  runSql("DELETE FROM comments WHERE id = ? AND user_id = ?", [commentId, userId]);
+  return db.getRowsModified() > 0;
+}
+
+export async function getCommentCount(repoId: number): Promise<number> {
+  await ensureDb();
+  const row = queryOne("SELECT COUNT(*) as count FROM comments WHERE repo_id = ?", [repoId]);
+  return (row?.count as number) || 0;
+}
+
+// --- Collection queries ---
+
+export async function createCollection(userId: number, title: string, description: string): Promise<number> {
+  await ensureDb();
+  runSql("INSERT INTO collections (user_id, title, description) VALUES (?, ?, ?)", [userId, title, description]);
+  const row = queryOne("SELECT last_insert_rowid() as id");
+  return (row?.id as number) || 0;
+}
+
+export async function getPublicCollections(limit: number = 30, offset: number = 0): Promise<DbCollection[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT c.*, u.username, u.avatar_url as user_avatar,
+      (SELECT COUNT(*) FROM collection_repos WHERE collection_id = c.id) as repo_count
+    FROM collections c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.is_public = 1
+    ORDER BY c.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [limit, offset]) as unknown as DbCollection[];
+}
+
+export async function getCollectionsByUser(userId: number): Promise<DbCollection[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT c.*,
+      (SELECT COUNT(*) FROM collection_repos WHERE collection_id = c.id) as repo_count
+    FROM collections c
+    WHERE c.user_id = ?
+    ORDER BY c.created_at DESC
+  `, [userId]) as unknown as DbCollection[];
+}
+
+export async function getCollectionById(id: number): Promise<DbCollection | undefined> {
+  await ensureDb();
+  return queryOne(`
+    SELECT c.*, u.username, u.avatar_url as user_avatar,
+      (SELECT COUNT(*) FROM collection_repos WHERE collection_id = c.id) as repo_count
+    FROM collections c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `, [id]) as unknown as DbCollection | undefined;
+}
+
+export async function getCollectionRepos(collectionId: number): Promise<DbRepo[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar
+    FROM collection_repos cr
+    JOIN repos r ON cr.repo_id = r.id
+    LEFT JOIN users u ON r.submitted_by = u.id
+    WHERE cr.collection_id = ?
+    ORDER BY cr.added_at DESC
+  `, [collectionId]) as unknown as DbRepo[];
+}
+
+export async function addRepoToCollection(collectionId: number, repoId: number, userId: number): Promise<boolean> {
+  await ensureDb();
+  const col = queryOne("SELECT id FROM collections WHERE id = ? AND user_id = ?", [collectionId, userId]);
+  if (!col) return false;
+  db.run("INSERT OR IGNORE INTO collection_repos (collection_id, repo_id) VALUES (?, ?)", [collectionId, repoId]);
+  return db.getRowsModified() > 0;
+}
+
+export async function removeRepoFromCollection(collectionId: number, repoId: number, userId: number): Promise<boolean> {
+  await ensureDb();
+  const col = queryOne("SELECT id FROM collections WHERE id = ? AND user_id = ?", [collectionId, userId]);
+  if (!col) return false;
+  runSql("DELETE FROM collection_repos WHERE collection_id = ? AND repo_id = ?", [collectionId, repoId]);
+  return db.getRowsModified() > 0;
+}
+
+export async function deleteCollection(collectionId: number, userId: number): Promise<boolean> {
+  await ensureDb();
+  const col = queryOne("SELECT id FROM collections WHERE id = ? AND user_id = ?", [collectionId, userId]);
+  if (!col) return false;
+  runSql("DELETE FROM collection_repos WHERE collection_id = ?", [collectionId]);
+  runSql("DELETE FROM collections WHERE id = ? AND user_id = ?", [collectionId, userId]);
+  return db.getRowsModified() > 0;
+}
+
+// --- Sponsored slot queries ---
+
+export const SPONSORED_TIERS = {
+  "1d":  { credits: 100, days: 1, label: "1 day" },
+  "3d":  { credits: 250, days: 3, label: "3 days" },
+  "7d":  { credits: 400, days: 7, label: "7 days" },
+} as const;
+
+export async function getActiveSponsored(): Promise<DbRepo[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT r.*, u.username as submitted_by_username, u.avatar_url as submitted_by_avatar,
+      s.slot_position, s.ends_at as sponsor_ends_at
+    FROM sponsored_slots s
+    JOIN repos r ON s.repo_id = r.id
+    LEFT JOIN users u ON r.submitted_by = u.id
+    WHERE s.ends_at > datetime('now')
+    ORDER BY s.slot_position ASC
+    LIMIT 2
+  `) as unknown as DbRepo[];
+}
+
+export async function createSponsoredSlot(repoId: number, userId: number, slot: number, duration: string): Promise<boolean> {
+  await ensureDb();
+  const t = SPONSORED_TIERS[duration as keyof typeof SPONSORED_TIERS];
+  if (!t || (slot !== 1 && slot !== 2)) return false;
+  // Check slot availability
+  const active = queryOne("SELECT id FROM sponsored_slots WHERE slot_position = ? AND ends_at > datetime('now')", [slot]);
+  if (active) return false;
+  // Deduct credits
+  db.run(`UPDATE users SET credits = credits - ${t.credits} WHERE id = ? AND credits >= ${t.credits}`, [userId]);
+  if (db.getRowsModified() === 0) return false;
+  runSql(
+    `INSERT INTO sponsored_slots (repo_id, user_id, slot_position, ends_at) VALUES (?, ?, ?, datetime('now', '+${t.days} days'))`,
+    [repoId, userId, slot]
+  );
+  return true;
+}
+
+// --- Language queries ---
+
+export async function getLanguages(): Promise<{ language: string; count: number }[]> {
+  await ensureDb();
+  return queryAll(`
+    SELECT language, COUNT(*) as count
+    FROM repos
+    WHERE language != '' AND language IS NOT NULL
+    GROUP BY language
+    ORDER BY count DESC
+  `) as unknown as { language: string; count: number }[];
+}
+
+// --- Extended repo queries ---
+
+export async function getReposCount(options: { search?: string; language?: string }): Promise<number> {
+  await ensureDb();
+  let where = "WHERE 1=1";
+  const params: (string | number)[] = [];
+  if (options.search) {
+    const sanitized = options.search.slice(0, 200).replace(/[%_]/g, "\\$&");
+    where += " AND (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\' OR r.owner LIKE ? ESCAPE '\\')";
+    const term = `%${sanitized}%`;
+    params.push(term, term, term);
+  }
+  if (options.language) {
+    where += " AND r.language = ?";
+    params.push(options.language);
+  }
+  const row = queryOne(`SELECT COUNT(*) as count FROM repos r ${where}`, params);
+  return (row?.count as number) || 0;
 }
 
 // --- Types ---
@@ -378,6 +649,31 @@ export interface DbRepo {
   submitted_by_username: string;
   submitted_by_avatar: string;
   boost_until: string | null;
+  boost_tier: string;
   upvote_count: number;
+  comment_count: number;
   created_at: string;
+}
+
+export interface DbComment {
+  id: number;
+  repo_id: number;
+  user_id: number;
+  parent_id: number | null;
+  body: string;
+  created_at: string;
+  username: string;
+  user_avatar: string;
+}
+
+export interface DbCollection {
+  id: number;
+  user_id: number;
+  title: string;
+  description: string;
+  is_public: number;
+  created_at: string;
+  username: string;
+  user_avatar: string;
+  repo_count: number;
 }

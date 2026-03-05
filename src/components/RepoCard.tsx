@@ -17,6 +17,7 @@ interface RepoCardProps {
     submitted_by_username: string;
     submitted_by_avatar: string;
     upvote_count: number;
+    comment_count?: number;
     hasVoted: boolean;
     isBoosted: boolean;
     created_at: string;
@@ -107,6 +108,11 @@ export function RepoCard({ repo }: RepoCardProps) {
             <span className="flex items-center gap-1">
               &#9733; {repo.stars.toLocaleString()}
             </span>
+            {(repo.comment_count ?? 0) > 0 && (
+              <span className="flex items-center gap-1">
+                &#128172; {repo.comment_count}
+              </span>
+            )}
             <span>by {repo.submitted_by_username}</span>
             <span>{timeAgo}</span>
           </div>

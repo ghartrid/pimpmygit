@@ -27,6 +27,12 @@ export function Navbar() {
             <Link href="/leaderboard" className="hover:no-underline" style={{ color: "var(--text-muted)" }}>
               Leaderboard
             </Link>
+            <Link href="/language" className="hover:no-underline" style={{ color: "var(--text-muted)" }}>
+              Languages
+            </Link>
+            <Link href="/collections" className="hover:no-underline" style={{ color: "var(--text-muted)" }}>
+              Collections
+            </Link>
             {status === "authenticated" && (
               <Link href="/submit" className="hover:no-underline" style={{ color: "var(--green)" }}>
                 + Submit

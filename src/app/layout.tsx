@@ -35,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        <link rel="alternate" type="application/rss+xml" title="PimpMyGit - Trending Repos" href="/feed.xml" />
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=G-Z5PVSBGKCB"
@@ -55,13 +56,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Navbar />
           <main className="max-w-6xl mx-auto px-4 py-8 pb-20 sm:pb-8">{children}</main>
           <footer className="hidden sm:block border-t text-center py-6" style={{ borderColor: "var(--border)" }}>
-            <a
-              href="/contact"
-              className="inline-block px-6 py-2.5 rounded-lg font-medium text-sm no-underline hover:no-underline"
-              style={{ background: "var(--accent)", color: "#fff" }}
-            >
-              &#9993; Contact Us
-            </a>
+            <div className="flex items-center justify-center gap-4">
+              <a
+                href="/contact"
+                className="inline-block px-6 py-2.5 rounded-lg font-medium text-sm no-underline hover:no-underline"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                &#9993; Contact Us
+              </a>
+              <a
+                href="/api-docs"
+                className="inline-block px-4 py-2 rounded-lg text-sm no-underline hover:no-underline"
+                style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              >
+                API
+              </a>
+              <a
+                href="/feed.xml"
+                className="inline-block px-4 py-2 rounded-lg text-sm no-underline hover:no-underline"
+                style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              >
+                RSS
+              </a>
+            </div>
           </footer>
         </Providers>
       </body>

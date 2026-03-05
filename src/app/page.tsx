@@ -7,9 +7,17 @@ type SortMode = "trending" | "new" | "top";
 
 export default function Home() {
   const [repos, setRepos] = useState<RepoCardData[]>([]);
+  const [sponsored, setSponsored] = useState<RepoCardData[]>([]);
   const [sort, setSort] = useState<SortMode>("trending");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/sponsored")
+      .then((res) => res.json())
+      .then((data) => setSponsored(data.slots || []))
+      .catch(() => {});
+  }, []);
 
   const fetchRepos = useCallback(async () => {
     setLoading(true);
@@ -76,6 +84,26 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      {/* Sponsored */}
+      {sponsored.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
+            Sponsored
+          </h2>
+          <div className="flex flex-col gap-3">
+            {sponsored.map((repo) => (
+              <div
+                key={repo.id}
+                className="rounded-lg border-2 p-1"
+                style={{ borderColor: "var(--gold)", background: "rgba(210,153,34,0.05)" }}
+              >
+                <RepoCard repo={{ ...repo, isBoosted: true, hasVoted: false }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Repo list */}
       {loading ? (
