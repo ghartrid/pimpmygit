@@ -18,8 +18,8 @@ export function Navbar() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 no-underline hover:no-underline">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <span style={{ color: "var(--gold)", fontSize: 24 }}>&#9733;</span>
-            <span className="text-xl font-bold" style={{ color: "var(--text)" }}>PimpMyGit</span>
+            <img src="/logo-navbar.png" alt="PimpMyGit" width={36} height={36} style={{ display: "block" }} />
+            <span className="text-2xl font-bold" style={{ color: "var(--text)" }}>PimpMyGit</span>
           </Link>
           <div className="hidden sm:flex items-center gap-4 text-sm">
             <Link href="/" className="hover:no-underline" style={{ color: "var(--text-muted)" }}>
