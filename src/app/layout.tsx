@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Navbar } from "@/components/Navbar";
 import { WebCounter } from "@/components/WebCounter";
+import { ChatBot } from "@/components/ChatBot";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://pimpmygit.com"),
@@ -119,6 +120,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <WebCounter />
             </div>
           </footer>
+          <ChatBot />
         </Providers>
       </body>
     </html>

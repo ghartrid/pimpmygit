@@ -143,6 +143,16 @@ function initTables() {
     );
   `);
   db.run(`INSERT OR IGNORE INTO page_views (id, count) VALUES (1, 0)`);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      user_message TEXT NOT NULL,
+      bot_response TEXT NOT NULL,
+      intent TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
   // Add boost_tier column to repos if not exists
   try {
     db.run("ALTER TABLE repos ADD COLUMN boost_tier TEXT DEFAULT ''");
@@ -810,4 +820,30 @@ export async function getPageViews(): Promise<number> {
   await ensureDb();
   const row = queryOne("SELECT count FROM page_views WHERE id = 1");
   return (row?.count as number) || 0;
+}
+
+// ── Chat logs ──
+export async function logChat(sessionId: string, userMessage: string, botResponse: string, intent: string) {
+  await ensureDb();
+  runSql(
+    "INSERT INTO chat_logs (session_id, user_message, bot_response, intent) VALUES (?, ?, ?, ?)",
+    [sessionId, userMessage.slice(0, 1000), botResponse.slice(0, 2000), intent],
+  );
+}
+
+export async function getChatLogs(limit: number = 100): Promise<{ id: number; session_id: string; user_message: string; bot_response: string; intent: string; created_at: string }[]> {
+  await ensureDb();
+  return queryAll("SELECT * FROM chat_logs ORDER BY id DESC LIMIT ?", [limit]) as unknown as { id: number; session_id: string; user_message: string; bot_response: string; intent: string; created_at: string }[];
+}
+
+export async function getChatInsights(): Promise<{ total: number; topIntents: { intent: string; count: number }[]; recentQuestions: string[] }> {
+  await ensureDb();
+  const total = queryOne("SELECT COUNT(*) as count FROM chat_logs");
+  const intents = queryAll("SELECT intent, COUNT(*) as count FROM chat_logs WHERE intent != '' GROUP BY intent ORDER BY count DESC LIMIT 10") as unknown as { intent: string; count: number }[];
+  const recent = queryAll("SELECT user_message FROM chat_logs ORDER BY id DESC LIMIT 20") as unknown as { user_message: string }[];
+  return {
+    total: (total?.count as number) || 0,
+    topIntents: intents,
+    recentQuestions: recent.map((r) => r.user_message),
+  };
 }

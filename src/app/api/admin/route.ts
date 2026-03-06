@@ -7,6 +7,8 @@ import {
   adminDeleteRepo,
   adminDeleteComment,
   getContactMessages,
+  getChatLogs,
+  getChatInsights,
 } from "@/lib/db";
 
 function checkAuth(req: NextRequest): boolean {
@@ -34,6 +36,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ comments: await adminGetAllComments() });
     case "messages":
       return NextResponse.json({ messages: await getContactMessages() });
+    case "chatlog": {
+      const [logs, insights] = await Promise.all([getChatLogs(200), getChatInsights()]);
+      return NextResponse.json({ logs, insights });
+    }
     default:
       return NextResponse.json({ error: "Invalid section" }, { status: 400 });
   }

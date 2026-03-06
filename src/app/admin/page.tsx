@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-type Tab = "stats" | "repos" | "users" | "comments" | "messages" | "promote";
+type Tab = "stats" | "repos" | "users" | "comments" | "messages" | "promote" | "chatlog";
 
 export default function AdminPage() {
   const [token, setToken] = useState("");
@@ -34,7 +34,7 @@ export default function AdminPage() {
     setTab(t);
     setLoading(true);
     setError("");
-    const url = t === "promote" ? "/api/admin/promote" : `/api/admin?section=${t}`;
+    const url = t === "promote" ? "/api/admin/promote" : `/api/admin?section=${t === "chatlog" ? "chatlog" : t}`;
     const res = await fetch(url, { headers: headers() });
     if (res.ok) {
       setData(await res.json());
@@ -107,6 +107,7 @@ export default function AdminPage() {
     { key: "comments", label: "Comments", icon: "\uD83D\uDCAC" },
     { key: "messages", label: "Messages", icon: "\u2709\uFE0F" },
     { key: "promote", label: "Promote", icon: "\uD83D\uDE80" },
+    { key: "chatlog", label: "Chat Logs", icon: "\uD83E\uDD16" },
   ];
 
   return (
@@ -153,6 +154,7 @@ export default function AdminPage() {
           {tab === "comments" && data && <CommentsPanel comments={(data as { comments: Record<string, unknown>[] }).comments} onDelete={handleDelete} />}
           {tab === "messages" && data && <MessagesPanel messages={(data as { messages: Record<string, unknown>[] }).messages} />}
           {tab === "promote" && data && <PromotePanel data={data} />}
+          {tab === "chatlog" && data && <ChatLogsPanel data={data} />}
         </>
       )}
     </div>
@@ -627,6 +629,101 @@ function PromotePanel({ data }: { data: Record<string, unknown> }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Chat Logs Panel ──
+
+interface ChatLogData {
+  logs: { id: number; session_id: string; user_message: string; bot_response: string; intent: string; created_at: string }[];
+  insights: { total: number; topIntents: { intent: string; count: number }[]; recentQuestions: string[] };
+}
+
+function ChatLogsPanel({ data }: { data: Record<string, unknown> }) {
+  const d = data as unknown as ChatLogData;
+
+  return (
+    <div>
+      {/* Insights summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <StatCard label="Total Messages" value={d.insights.total} color="var(--accent)" />
+        <StatCard label="Unique Intents" value={d.insights.topIntents.length} color="var(--green)" />
+        <StatCard label="Unknown Queries" value={d.insights.topIntents.find((i) => i.intent === "unknown")?.count || 0} color="var(--red)" />
+        <StatCard label="Sessions" value={new Set(d.logs.map((l) => l.session_id)).size} color="var(--gold)" />
+      </div>
+
+      {/* Top intents — what users ask about most */}
+      {d.insights.topIntents.length > 0 && (
+        <div className="rounded-xl border p-4 mb-6" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+          <h3 className="text-sm font-bold mb-3">Top User Intents (what people ask about)</h3>
+          <div className="flex flex-wrap gap-2">
+            {d.insights.topIntents.map((i) => (
+              <span
+                key={i.intent}
+                className="px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{
+                  background: i.intent === "unknown" ? "rgba(248,81,73,0.15)" : "var(--bg-hover)",
+                  color: i.intent === "unknown" ? "var(--red)" : "var(--text)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {i.intent} ({i.count})
+              </span>
+            ))}
+          </div>
+          <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+            High &quot;unknown&quot; count = users asking things the bot can&apos;t answer. Add new rules to cover those topics.
+          </p>
+        </div>
+      )}
+
+      {/* Chat log table */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ background: "var(--bg-hover)" }}>
+              <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Time</th>
+              <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>User Message</th>
+              <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Bot Response</th>
+              <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Intent</th>
+              <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Session</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.logs.map((l) => (
+              <tr key={l.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                  {l.created_at?.slice(0, 16)}
+                </td>
+                <td className="px-3 py-2 text-xs max-w-48 truncate" style={{ color: "var(--text)" }}>
+                  {l.user_message}
+                </td>
+                <td className="px-3 py-2 text-xs max-w-64 truncate" style={{ color: "var(--text-muted)" }}>
+                  {l.bot_response}
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      background: l.intent === "unknown" ? "rgba(248,81,73,0.15)" : "var(--bg-hover)",
+                      color: l.intent === "unknown" ? "var(--red)" : "var(--text-muted)",
+                    }}
+                  >
+                    {l.intent}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                  {l.session_id.slice(0, 8)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {d.logs.length === 0 && (
+          <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>No chat messages yet</p>
+        )}
+      </div>
     </div>
   );
 }
