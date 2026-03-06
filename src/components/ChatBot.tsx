@@ -14,7 +14,7 @@ function generateSessionId() {
 export function ChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "bot", text: "Hey! I'm the PimpMyGit bot. Ask me anything about the site, repos, or how things work." },
+    { role: "bot", text: "Hey! Need help? I can show you how to submit a repo, find trending projects, or explain how voting works. What are you looking for?" },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -24,6 +24,16 @@ export function ChatBot() {
 
   useEffect(() => {
     sessionRef.current = generateSessionId();
+
+    // Auto-open after 3 seconds on first visit (once per session)
+    const shown = sessionStorage.getItem("pmg_chat_shown");
+    if (!shown) {
+      const timer = setTimeout(() => {
+        setOpen(true);
+        sessionStorage.setItem("pmg_chat_shown", "1");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   useEffect(() => {
