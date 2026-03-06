@@ -18,6 +18,14 @@ export async function GET(
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
+  // Private collections only visible to owner
+  if (!collection.is_public) {
+    const session = (await getServerSession(authOptions)) as ExtendedSession | null;
+    if (collection.user_id !== session?.userId) {
+      return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+    }
+  }
+
   const repos = await getCollectionRepos(collectionId);
   return NextResponse.json({ collection, repos });
 }
