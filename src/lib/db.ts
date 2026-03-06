@@ -660,6 +660,84 @@ export async function getAllRepos(): Promise<{ id: number; owner: string; name: 
   return queryAll("SELECT id, owner, name FROM repos ORDER BY id ASC") as unknown as { id: number; owner: string; name: string }[];
 }
 
+// --- Admin queries ---
+
+export async function getAdminStats() {
+  await ensureDb();
+  const users = queryOne("SELECT COUNT(*) as count FROM users");
+  const repos = queryOne("SELECT COUNT(*) as count FROM repos");
+  const votes = queryOne("SELECT COUNT(*) as count FROM votes");
+  const comments = queryOne("SELECT COUNT(*) as count FROM comments");
+  const collections = queryOne("SELECT COUNT(*) as count FROM collections");
+  const messages = queryOne("SELECT COUNT(*) as count FROM contact_messages");
+  const totalCredits = queryOne("SELECT SUM(credits) as total FROM users");
+  const activeBoosts = queryOne("SELECT COUNT(*) as count FROM repos WHERE boost_until > datetime('now')");
+  const activeSponsors = queryOne("SELECT COUNT(*) as count FROM sponsored_slots WHERE ends_at > datetime('now')");
+  const recentUsers = queryAll("SELECT id, username, avatar_url, credits, created_at FROM users ORDER BY id DESC LIMIT 10") as unknown as DbUser[];
+  return {
+    users: (users?.count as number) || 0,
+    repos: (repos?.count as number) || 0,
+    votes: (votes?.count as number) || 0,
+    comments: (comments?.count as number) || 0,
+    collections: (collections?.count as number) || 0,
+    messages: (messages?.count as number) || 0,
+    totalCredits: (totalCredits?.total as number) || 0,
+    activeBoosts: (activeBoosts?.count as number) || 0,
+    activeSponsors: (activeSponsors?.count as number) || 0,
+    recentUsers,
+  };
+}
+
+export async function adminGetAllRepos() {
+  await ensureDb();
+  return queryAll(`
+    SELECT r.id, r.owner, r.name, r.stars, r.language, r.upvote_count, r.boost_until, r.created_at,
+      u.username as submitted_by_username,
+      (SELECT COUNT(*) FROM comments WHERE comments.repo_id = r.id) as comment_count
+    FROM repos r LEFT JOIN users u ON r.submitted_by = u.id
+    ORDER BY r.id DESC
+  `) as unknown as Record<string, unknown>[];
+}
+
+export async function adminGetAllUsers() {
+  await ensureDb();
+  return queryAll(`
+    SELECT u.id, u.username, u.avatar_url, u.credits, u.created_at,
+      (SELECT COUNT(*) FROM repos WHERE repos.submitted_by = u.id) as repo_count,
+      (SELECT COUNT(*) FROM votes WHERE votes.user_id = u.id) as vote_count
+    FROM users u ORDER BY u.id DESC
+  `) as unknown as Record<string, unknown>[];
+}
+
+export async function adminGetAllComments() {
+  await ensureDb();
+  return queryAll(`
+    SELECT c.id, c.body, c.created_at, c.repo_id,
+      u.username, r.owner as repo_owner, r.name as repo_name
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    LEFT JOIN repos r ON c.repo_id = r.id
+    ORDER BY c.id DESC LIMIT 50
+  `) as unknown as Record<string, unknown>[];
+}
+
+export async function adminDeleteRepo(repoId: number) {
+  await ensureDb();
+  runSql("DELETE FROM comments WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM collection_repos WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM votes WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM sponsored_slots WHERE repo_id = ?", [repoId]);
+  runSql("DELETE FROM repos WHERE id = ?", [repoId]);
+  return db.getRowsModified() > 0;
+}
+
+export async function adminDeleteComment(commentId: number) {
+  await ensureDb();
+  runSql("DELETE FROM comments WHERE parent_id = ?", [commentId]);
+  runSql("DELETE FROM comments WHERE id = ?", [commentId]);
+  return db.getRowsModified() > 0;
+}
+
 // --- Types ---
 
 export interface DbUser {
