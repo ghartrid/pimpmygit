@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-type Tab = "stats" | "repos" | "users" | "comments" | "messages";
+type Tab = "stats" | "repos" | "users" | "comments" | "messages" | "promote";
 
 export default function AdminPage() {
   const [token, setToken] = useState("");
@@ -34,7 +34,8 @@ export default function AdminPage() {
     setTab(t);
     setLoading(true);
     setError("");
-    const res = await fetch(`/api/admin?section=${t}`, { headers: headers() });
+    const url = t === "promote" ? "/api/admin/promote" : `/api/admin?section=${t}`;
+    const res = await fetch(url, { headers: headers() });
     if (res.ok) {
       setData(await res.json());
     } else {
@@ -105,6 +106,7 @@ export default function AdminPage() {
     { key: "users", label: "Users", icon: "\uD83D\uDC65" },
     { key: "comments", label: "Comments", icon: "\uD83D\uDCAC" },
     { key: "messages", label: "Messages", icon: "\u2709\uFE0F" },
+    { key: "promote", label: "Promote", icon: "\uD83D\uDE80" },
   ];
 
   return (
@@ -150,6 +152,7 @@ export default function AdminPage() {
           {tab === "users" && data && <UsersPanel users={(data as { users: Record<string, unknown>[] }).users} />}
           {tab === "comments" && data && <CommentsPanel comments={(data as { comments: Record<string, unknown>[] }).comments} onDelete={handleDelete} />}
           {tab === "messages" && data && <MessagesPanel messages={(data as { messages: Record<string, unknown>[] }).messages} />}
+          {tab === "promote" && data && <PromotePanel data={data} />}
         </>
       )}
     </div>
@@ -331,6 +334,299 @@ function MessagesPanel({ messages }: { messages: Record<string, unknown>[] }) {
         </div>
       ))}
       {messages.length === 0 && <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>No messages yet</p>}
+    </div>
+  );
+}
+
+// ── Promote Panel ──
+
+interface PromoteData {
+  stage: string;
+  momentum: string;
+  stats: { totalRepos: number; totalVotes: number; totalStars: number; pageViews: number; submitters: number; topLangs: { lang: string; count: number }[] };
+  insights: string[];
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  recommendations: string[];
+  content: { platform: string; angle: string; score: number; text: string }[];
+  competitors: { name: string; weakness: string; advantage: string }[];
+  audiences: { name: string; hook: string; platforms: string }[];
+  outreach: { name: string; relevance: string; pitch: string }[];
+  schedule: { optimal: { platform: string; days: string; times: string; note: string }[]; weekly: { day: string; task: string }[] };
+  seo: { primary: string[]; longTail: string[]; langKeywords: string[] };
+}
+
+function PromotePanel({ data }: { data: Record<string, unknown> }) {
+  const d = data as unknown as PromoteData;
+  const [section, setSection] = useState<string>("overview");
+  const [copied, setCopied] = useState<number | null>(null);
+
+  function copyText(text: string, idx: number) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(idx);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  }
+
+  const sections = [
+    { key: "overview", label: "Overview" },
+    { key: "content", label: "Content" },
+    { key: "outreach", label: "Outreach" },
+    { key: "schedule", label: "Schedule" },
+    { key: "seo", label: "SEO" },
+    { key: "competitors", label: "Competitors" },
+  ];
+
+  const stageColors: Record<string, string> = { launch: "#f59e0b", early: "#3b82f6", growth: "#22c55e", scaling: "#a855f7" };
+  const momentumColors: Record<string, string> = { stagnant: "#ef4444", declining: "#f97316", neutral: "#a3a3a3", growing: "#22c55e", surging: "#a855f7" };
+
+  return (
+    <div>
+      {/* Stage + Momentum badges */}
+      <div className="flex items-center gap-3 mb-6">
+        <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: stageColors[d.stage] || "#666", color: "#fff" }}>
+          STAGE: {d.stage.toUpperCase()}
+        </span>
+        <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: momentumColors[d.momentum] || "#666", color: "#fff" }}>
+          MOMENTUM: {d.momentum.toUpperCase()}
+        </span>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {d.stats.totalRepos} repos | {d.stats.totalVotes} votes | {d.stats.submitters} submitters | {d.stats.pageViews.toLocaleString()} views
+        </span>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-1 mb-6 rounded-lg overflow-hidden" style={{ background: "var(--bg)" }}>
+        {sections.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSection(s.key)}
+            className="px-4 py-2 text-xs font-medium cursor-pointer transition-all"
+            style={{
+              background: section === s.key ? "var(--accent)" : "transparent",
+              color: section === s.key ? "#fff" : "var(--text-muted)",
+              border: "none",
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {section === "overview" && (
+        <div className="flex flex-col gap-4">
+          {/* Insights */}
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Insights</h3>
+            {d.insights.map((i, idx) => (
+              <p key={idx} className="text-sm mb-1" style={{ color: "var(--text-muted)" }}>💡 {i}</p>
+            ))}
+          </div>
+
+          {/* SWOT */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {d.strengths.length > 0 && (
+              <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+                <h3 className="text-sm font-bold mb-2" style={{ color: "#22c55e" }}>Strengths</h3>
+                {d.strengths.map((s, i) => <p key={i} className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>✅ {s}</p>)}
+              </div>
+            )}
+            {d.weaknesses.length > 0 && (
+              <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+                <h3 className="text-sm font-bold mb-2" style={{ color: "#f59e0b" }}>Weaknesses</h3>
+                {d.weaknesses.map((w, i) => <p key={i} className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>⚠️ {w}</p>)}
+              </div>
+            )}
+            {d.opportunities.length > 0 && (
+              <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+                <h3 className="text-sm font-bold mb-2" style={{ color: "#3b82f6" }}>Opportunities</h3>
+                {d.opportunities.map((o, i) => <p key={i} className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>🎯 {o}</p>)}
+              </div>
+            )}
+          </div>
+
+          {/* Recommendations */}
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Recommendations</h3>
+            {d.recommendations.map((r, i) => (
+              <p key={i} className="text-sm mb-2" style={{ color: r.startsWith("PRIORITY") ? "var(--accent)" : "var(--text-muted)" }}>
+                {i + 1}. {r}
+              </p>
+            ))}
+          </div>
+
+          {/* Audiences */}
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Target Audiences</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {d.audiences.map((a, i) => (
+                <div key={i} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-sm font-bold mb-1">{a.name}</p>
+                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{a.hook}</p>
+                  <p className="text-xs" style={{ color: "var(--accent)" }}>{a.platforms}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      {section === "content" && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+            {d.content.length} posts generated, sorted by engagement score. Click Copy to grab any post.
+          </p>
+          {d.content.map((c, i) => {
+            const barWidth = Math.round(c.score);
+            return (
+              <div key={i} className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: "var(--bg)", color: "var(--text-muted)" }}>
+                      {c.platform}
+                    </span>
+                    <span className="text-xs" style={{ color: "var(--accent)" }}>{c.angle}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <div className="w-16 h-2 rounded-full overflow-hidden" style={{ background: "var(--bg)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${barWidth}%`,
+                            background: c.score >= 70 ? "#22c55e" : c.score >= 50 ? "#f59e0b" : "#ef4444",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{c.score}</span>
+                    </div>
+                    <button
+                      onClick={() => copyText(c.text, i)}
+                      className="px-2 py-1 rounded text-xs cursor-pointer"
+                      style={{
+                        background: copied === i ? "var(--green)" : "var(--accent)",
+                        color: "#fff",
+                        border: "none",
+                      }}
+                    >
+                      {copied === i ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <pre className="text-xs whitespace-pre-wrap font-sans" style={{ color: "var(--text-muted)" }}>{c.text}</pre>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Outreach */}
+      {section === "outreach" && (
+        <div className="flex flex-col gap-3">
+          <h3 className="text-sm font-bold mb-1">Newsletter & Community Targets</h3>
+          {d.outreach.map((o, i) => {
+            const badge = o.relevance === "high" ? "🔴" : o.relevance === "medium" ? "🟡" : "⚪";
+            return (
+              <div key={i} className="rounded-xl border p-4 flex items-start gap-3" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+                <span className="text-lg">{badge}</span>
+                <div>
+                  <p className="text-sm font-bold">{o.name}</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>{o.pitch}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Schedule */}
+      {section === "schedule" && (
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Optimal Posting Times</h3>
+            <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: "var(--bg-hover)" }}>
+                    <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Platform</th>
+                    <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Days</th>
+                    <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Times</th>
+                    <th className="text-left px-3 py-2 font-medium" style={{ color: "var(--text-muted)" }}>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.schedule.optimal.map((s, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td className="px-3 py-2 font-medium">{s.platform}</td>
+                      <td className="px-3 py-2" style={{ color: "var(--accent)" }}>{s.days}</td>
+                      <td className="px-3 py-2">{s.times}</td>
+                      <td className="px-3 py-2" style={{ color: "var(--text-muted)" }}>{s.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Weekly Cadence</h3>
+            {d.schedule.weekly.map((w, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <span className="text-xs font-bold w-24" style={{ color: "var(--accent)" }}>{w.day}</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{w.task}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SEO */}
+      {section === "seo" && (
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Primary Keywords</h3>
+            <div className="flex flex-wrap gap-2">
+              {d.seo.primary.map((k, i) => (
+                <span key={i} className="px-2 py-1 rounded text-xs" style={{ background: "var(--bg)", color: "var(--text-muted)" }}>{k}</span>
+              ))}
+            </div>
+          </div>
+          {d.seo.langKeywords.length > 0 && (
+            <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+              <h3 className="text-sm font-bold mb-3">Language Keywords</h3>
+              <div className="flex flex-wrap gap-2">
+                {d.seo.langKeywords.map((k, i) => (
+                  <span key={i} className="px-2 py-1 rounded text-xs" style={{ background: "var(--bg)", color: "var(--accent)" }}>{k}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+            <h3 className="text-sm font-bold mb-3">Long-Tail Keywords</h3>
+            <div className="flex flex-wrap gap-2">
+              {d.seo.longTail.map((k, i) => (
+                <span key={i} className="px-2 py-1 rounded text-xs" style={{ background: "var(--bg)", color: "var(--text-muted)" }}>{k}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Competitors */}
+      {section === "competitors" && (
+        <div className="flex flex-col gap-3">
+          {d.competitors.map((c, i) => (
+            <div key={i} className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+              <p className="text-sm font-bold mb-2">{c.name}</p>
+              <p className="text-xs mb-1"><span style={{ color: "#ef4444" }}>Weakness:</span> <span style={{ color: "var(--text-muted)" }}>{c.weakness}</span></p>
+              <p className="text-xs"><span style={{ color: "#22c55e" }}>Our advantage:</span> <span style={{ color: "var(--text-muted)" }}>{c.advantage}</span></p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
