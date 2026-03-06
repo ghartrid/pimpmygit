@@ -85,6 +85,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 RSS
               </a>
+              <a
+                href="/stats"
+                className="inline-block px-4 py-2 rounded-lg text-sm no-underline hover:no-underline"
+                style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              >
+                Stats
+              </a>
+              <a
+                href="/weekly"
+                className="inline-block px-4 py-2 rounded-lg text-sm no-underline hover:no-underline"
+                style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              >
+                Weekly
+              </a>
             </div>
             <div className="mt-4 flex justify-center">
               <a
