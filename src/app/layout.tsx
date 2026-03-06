@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Navbar } from "@/components/Navbar";
+import { WebCounter } from "@/components/WebCounter";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://pimpmygit.com"),
@@ -99,6 +100,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1090929&theme=light&t=1772747609395"
                 />
               </a>
+            </div>
+            <div className="mt-4">
+              <WebCounter />
             </div>
           </footer>
         </Providers>

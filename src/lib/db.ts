@@ -136,6 +136,13 @@ function initTables() {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS page_views (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      count INTEGER DEFAULT 0
+    );
+  `);
+  db.run(`INSERT OR IGNORE INTO page_views (id, count) VALUES (1, 0)`);
   // Add boost_tier column to repos if not exists
   try {
     db.run("ALTER TABLE repos ADD COLUMN boost_tier TEXT DEFAULT ''");
@@ -789,4 +796,18 @@ export interface DbCollection {
   username: string;
   user_avatar: string;
   repo_count: number;
+}
+
+// ── Page view counter ──
+export async function incrementPageViews(): Promise<number> {
+  await ensureDb();
+  runSql("UPDATE page_views SET count = count + 1 WHERE id = 1");
+  const row = queryOne("SELECT count FROM page_views WHERE id = 1");
+  return (row?.count as number) || 0;
+}
+
+export async function getPageViews(): Promise<number> {
+  await ensureDb();
+  const row = queryOne("SELECT count FROM page_views WHERE id = 1");
+  return (row?.count as number) || 0;
 }
