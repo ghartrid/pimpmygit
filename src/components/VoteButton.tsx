@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -17,6 +17,7 @@ export function VoteButton({ repoId, count: initialCount, hasVoted: initialVoted
   const [voted, setVoted] = useState(initialVoted);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   async function handleVote() {
     if (status !== "authenticated") {
@@ -31,6 +32,10 @@ export function VoteButton({ repoId, count: initialCount, hasVoted: initialVoted
       if (res.ok) {
         setVoted(data.voted);
         setCount(data.upvote_count);
+        // Trigger bounce animation
+        btnRef.current?.classList.remove("vote-bounce");
+        void btnRef.current?.offsetWidth; // force reflow
+        btnRef.current?.classList.add("vote-bounce");
         router.refresh();
       }
     } finally {
@@ -40,19 +45,21 @@ export function VoteButton({ repoId, count: initialCount, hasVoted: initialVoted
 
   return (
     <button
+      ref={btnRef}
       onClick={handleVote}
       disabled={loading}
-      className={`flex flex-col items-center rounded-lg border cursor-pointer transition-all duration-200 ${
-        large ? "px-6 py-3 text-lg" : "px-3 py-2 text-sm"
+      className={`flex flex-col items-center rounded-xl border cursor-pointer transition-all duration-200 ${
+        large ? "px-6 py-3 text-lg" : "px-3.5 py-2.5 text-sm"
       }`}
       style={{
         borderColor: voted ? "var(--accent)" : "var(--border)",
-        background: voted ? "rgba(88,166,255,0.1)" : "transparent",
+        background: voted ? "rgba(88,166,255,0.15)" : "var(--bg-card)",
         color: voted ? "var(--accent)" : "var(--text-muted)",
+        boxShadow: voted ? "0 0 12px rgba(88,166,255,0.2)" : "none",
       }}
     >
-      <span className={large ? "text-2xl" : "text-base"}>&#9650;</span>
-      <span className="font-bold">{count}</span>
+      <span className={large ? "text-2xl" : "text-base"} style={{ lineHeight: 1 }}>&#9650;</span>
+      <span className="font-bold mt-0.5">{count}</span>
     </button>
   );
 }

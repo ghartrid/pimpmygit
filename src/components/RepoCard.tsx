@@ -40,6 +40,11 @@ const LANG_COLORS: Record<string, string> = {
   Shell: "#89e051",
   Dart: "#00B4AB",
   Zig: "#ec915c",
+  "C#": "#178600",
+  Lua: "#000080",
+  Elixir: "#6e4a7e",
+  Scala: "#c22d40",
+  Haskell: "#5e5086",
 };
 
 export function RepoCard({ repo }: RepoCardProps) {
@@ -47,11 +52,25 @@ export function RepoCard({ repo }: RepoCardProps) {
 
   return (
     <div
-      className="rounded-lg border p-4 transition-all duration-200 hover:border-[var(--accent)]"
+      className="rounded-xl border p-4 transition-all duration-200"
       style={{
         background: "var(--bg-card)",
         borderColor: repo.isBoosted ? "var(--gold)" : "var(--border)",
-        boxShadow: repo.isBoosted ? "0 0 20px var(--gold-glow)" : "none",
+        boxShadow: repo.isBoosted ? "0 0 20px var(--gold-glow)" : "var(--card-shadow)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = repo.isBoosted
+          ? "0 0 30px var(--gold-glow)"
+          : "var(--card-shadow-hover)";
+        e.currentTarget.style.borderColor = repo.isBoosted ? "var(--gold)" : "var(--accent)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = repo.isBoosted
+          ? "0 0 20px var(--gold-glow)"
+          : "var(--card-shadow)";
+        e.currentTarget.style.borderColor = repo.isBoosted ? "var(--gold)" : "var(--border)";
       }}
     >
       <div className="flex gap-4">
@@ -68,36 +87,37 @@ export function RepoCard({ repo }: RepoCardProps) {
                 <Image
                   src={repo.avatar_url}
                   alt={repo.owner}
-                  width={24}
-                  height={24}
+                  width={28}
+                  height={28}
                   className="rounded-full flex-shrink-0"
+                  style={{ border: "2px solid var(--border)" }}
                 />
               )}
               <Link
                 href={`/repo/${repo.id}`}
-                className="font-semibold text-lg truncate hover:no-underline"
+                className="font-bold text-lg truncate hover:no-underline"
                 style={{ color: "var(--accent)" }}
               >
-                {repo.owner}/{repo.name}
+                {repo.owner}<span style={{ color: "var(--text-muted)", fontWeight: 400 }}>/</span>{repo.name}
               </Link>
             </div>
             {repo.isBoosted && (
               <span
-                className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                className="text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0"
                 style={{ background: "var(--gold-glow)", color: "var(--gold)" }}
               >
-                Promoted
+                &#9733; Promoted
               </span>
             )}
           </div>
 
-          <p className="mt-1 text-sm line-clamp-2" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1.5 text-sm line-clamp-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
             {repo.description || "No description provided"}
           </p>
 
           <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
             {repo.language && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5 font-medium">
                 <span
                   className="w-3 h-3 rounded-full inline-block"
                   style={{ background: LANG_COLORS[repo.language] || "#8b949e" }}
@@ -106,14 +126,14 @@ export function RepoCard({ repo }: RepoCardProps) {
               </span>
             )}
             <span className="flex items-center gap-1">
-              &#9733; {repo.stars.toLocaleString()}
+              <span style={{ color: "var(--gold)" }}>&#9733;</span> {repo.stars.toLocaleString()}
             </span>
             {(repo.comment_count ?? 0) > 0 && (
               <span className="flex items-center gap-1">
                 &#128172; {repo.comment_count}
               </span>
             )}
-            <span>by {repo.submitted_by_username}</span>
+            <span>by <strong>{repo.submitted_by_username}</strong></span>
             <span>{timeAgo}</span>
           </div>
         </div>
