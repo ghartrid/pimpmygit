@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 interface Message {
   role: "user" | "bot";
   text: string;
+  suggestions?: string[];
 }
 
 function generateSessionId() {
@@ -14,7 +15,11 @@ function generateSessionId() {
 export function ChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "bot", text: "Hey! Need help? I can show you how to submit a repo, find trending projects, or explain how voting works. What are you looking for?" },
+    {
+      role: "bot",
+      text: "Hey! Need help? I can show you how to submit a repo, find trending projects, or explain how voting works. What are you looking for?",
+      suggestions: ["What is PimpMyGit?", "How do I submit a repo?", "Show me trending repos"],
+    },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -44,9 +49,8 @@ export function ChatBot() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const send = useCallback(async () => {
-    const msg = input.trim();
-    if (!msg || sending) return;
+  const sendMessage = useCallback(async (msg: string) => {
+    if (!msg.trim() || sending) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: msg }]);
     setSending(true);
@@ -57,12 +61,20 @@ export function ChatBot() {
         body: JSON.stringify({ message: msg, sessionId: sessionRef.current }),
       });
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "bot", text: data.reply || "Something went wrong." }]);
+      setMessages((prev) => [...prev, {
+        role: "bot",
+        text: data.reply || "Something went wrong.",
+        suggestions: data.suggestions || [],
+      }]);
     } catch {
       setMessages((prev) => [...prev, { role: "bot", text: "Couldn't reach the server. Try again." }]);
     }
     setSending(false);
-  }, [input, sending]);
+  }, [sending]);
+
+  const send = useCallback(() => {
+    sendMessage(input.trim());
+  }, [input, sendMessage]);
 
   return (
     <>
@@ -98,7 +110,7 @@ export function ChatBot() {
             right: 24,
             width: 380,
             maxWidth: "calc(100vw - 32px)",
-            height: 500,
+            height: 520,
             maxHeight: "calc(100vh - 48px)",
             background: "var(--bg-card)",
             border: "1px solid var(--border)",
@@ -128,20 +140,46 @@ export function ChatBot() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ background: "var(--bg)" }}>
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className="rounded-xl px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap"
-                  style={
-                    m.role === "user"
-                      ? { background: "var(--accent)", color: "#fff" }
-                      : { background: "var(--bg-card)", color: "var(--text)", border: "1px solid var(--border)" }
-                  }
-                >
-                  {m.text}
+              <div key={i}>
+                <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className="rounded-xl px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap"
+                    style={
+                      m.role === "user"
+                        ? { background: "var(--accent)", color: "#fff" }
+                        : { background: "var(--bg-card)", color: "var(--text)", border: "1px solid var(--border)" }
+                    }
+                  >
+                    {m.text}
+                  </div>
                 </div>
+                {/* Suggestion chips */}
+                {m.role === "bot" && m.suggestions && m.suggestions.length > 0 && i === messages.length - 1 && !sending && (
+                  <div className="flex flex-wrap gap-1.5 mt-2 ml-1">
+                    {m.suggestions.map((s, j) => (
+                      <button
+                        key={j}
+                        onClick={() => sendMessage(s)}
+                        className="px-2.5 py-1 rounded-full text-xs cursor-pointer transition-colors"
+                        style={{
+                          background: "transparent",
+                          color: "var(--accent)",
+                          border: "1px solid var(--accent)",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "var(--accent)";
+                          e.currentTarget.style.color = "#fff";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "var(--accent)";
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {sending && (
