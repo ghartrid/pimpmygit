@@ -5,3 +5,4 @@ node_modules/
 .env*.local
 pimpmygit.db-shm
 pimpmygit.db-wal
+scripts/promotion-knowledge.json
