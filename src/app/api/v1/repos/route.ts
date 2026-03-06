@@ -40,6 +40,9 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(
     { data, meta: { total, limit, offset } },
-    { headers: { "X-RateLimit-Remaining": String(rl.remaining) } }
+    { headers: {
+      "X-RateLimit-Remaining": String(rl.remaining),
+      "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+    } }
   );
 }

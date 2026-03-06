@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "crypto";
+
 // Simple in-memory rate limiter for single-instance deployment
 const hits = new Map<string, number[]>();
 
@@ -34,4 +36,13 @@ export function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return "unknown";
+}
+
+export function checkAdminAuth(req: Request): boolean {
+  const auth = req.headers.get("authorization");
+  const token = process.env.ADMIN_TOKEN;
+  if (!token || !auth) return false;
+  const expected = `Bearer ${token}`;
+  if (auth.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(auth), Buffer.from(expected));
 }

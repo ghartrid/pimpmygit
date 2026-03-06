@@ -357,6 +357,21 @@ function scoreIntent(normalized: string, words: string[], intent: Intent): numbe
 // ── Session memory for follow-ups ──
 const sessionMemory = new Map<string, { lastIntent: string; timestamp: number }>();
 const MEMORY_TTL = 10 * 60 * 1000; // 10 min
+const MAX_SESSIONS = 1000;
+
+function pruneMap(map: Map<string, { timestamp?: number; resetAt?: number }>, max: number) {
+  if (map.size <= max) return;
+  const now = Date.now();
+  for (const [key, val] of map) {
+    const ts = val.timestamp ?? val.resetAt ?? 0;
+    if (now - ts > MEMORY_TTL) map.delete(key);
+    if (map.size <= max) return;
+  }
+  // Still over limit — drop oldest entries
+  const entries = [...map.entries()];
+  const toDelete = entries.slice(0, entries.length - max);
+  for (const [key] of toDelete) map.delete(key);
+}
 
 function getLastIntent(sessionId: string): string | null {
   const entry = sessionMemory.get(sessionId);
@@ -366,6 +381,7 @@ function getLastIntent(sessionId: string): string | null {
 
 function setLastIntent(sessionId: string, intentId: string) {
   sessionMemory.set(sessionId, { lastIntent: intentId, timestamp: Date.now() });
+  pruneMap(sessionMemory as Map<string, { timestamp?: number; resetAt?: number }>, MAX_SESSIONS);
 }
 
 // Follow-up phrases that refer back to previous topic
@@ -458,6 +474,7 @@ function checkRate(sessionId: string): boolean {
   const entry = rateLimits.get(sessionId);
   if (!entry || now > entry.resetAt) {
     rateLimits.set(sessionId, { count: 1, resetAt: now + RATE_WINDOW });
+    pruneMap(rateLimits as Map<string, { timestamp?: number; resetAt?: number }>, MAX_SESSIONS);
     return true;
   }
   if (entry.count >= RATE_LIMIT) return false;

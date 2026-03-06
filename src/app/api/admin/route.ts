@@ -10,15 +10,15 @@ import {
   getChatLogs,
   getChatInsights,
 } from "@/lib/db";
-
-function checkAuth(req: NextRequest): boolean {
-  const auth = req.headers.get("authorization");
-  const token = process.env.ADMIN_TOKEN;
-  return !!token && auth === `Bearer ${token}`;
-}
+import { checkAdminAuth, rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
+  const ip = getClientIp(req);
+  const rl = rateLimit(`admin:${ip}`, 60, 60000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

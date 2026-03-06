@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { VoteButton } from "./VoteButton";
@@ -47,7 +48,7 @@ const LANG_COLORS: Record<string, string> = {
   Haskell: "#5e5086",
 };
 
-export function RepoCard({ repo }: RepoCardProps) {
+export const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
   const timeAgo = getTimeAgo(repo.created_at);
 
   return (
@@ -140,7 +141,7 @@ export function RepoCard({ repo }: RepoCardProps) {
       </div>
     </div>
   );
-}
+});
 
 function getTimeAgo(dateStr: string): string {
   const date = new Date(dateStr + "Z");

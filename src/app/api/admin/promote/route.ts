@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRepos, getReposCount, getPageViews } from "@/lib/db";
-
-function checkAuth(req: NextRequest): boolean {
-  const auth = req.headers.get("authorization");
-  const token = process.env.ADMIN_TOKEN;
-  return !!token && auth === `Bearer ${token}`;
-}
+import { checkAdminAuth } from "@/lib/rate-limit";
 
 // ── Competitor Intelligence ──
 const COMPETITORS = [
@@ -147,7 +142,7 @@ function generateContent(
 }
 
 export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

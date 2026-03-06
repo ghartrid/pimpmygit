@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (typeof name !== "string" || name.length > 100) {
     return NextResponse.json({ error: "Name too long" }, { status: 400 });
   }
-  if (typeof email !== "string" || email.length > 200 || !email.includes("@")) {
+  if (typeof email !== "string" || email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
   if (typeof message !== "string" || message.length > 2000) {

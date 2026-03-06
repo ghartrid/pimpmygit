@@ -157,6 +157,16 @@ function initTables() {
   try {
     db.run("ALTER TABLE repos ADD COLUMN boost_tier TEXT DEFAULT ''");
   } catch { /* column already exists */ }
+
+  // Indexes for query performance
+  db.run("CREATE INDEX IF NOT EXISTS idx_votes_repo_id ON votes(repo_id)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_votes_user_id ON votes(user_id)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_comments_repo_id ON comments(repo_id)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_repos_submitted_by ON repos(submitted_by)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_repos_language ON repos(language)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_collection_repos_collection ON collection_repos(collection_id)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_sponsored_slots_ends ON sponsored_slots(ends_at)");
+
   save();
 }
 

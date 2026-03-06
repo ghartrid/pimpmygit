@@ -24,9 +24,12 @@ export function parseGitHubUrl(url: string): { owner: string; name: string } | n
   return null;
 }
 
+const GITHUB_NAME_RE = /^[a-zA-Z0-9._-]+$/;
+
 export async function fetchRepoData(owner: string, name: string): Promise<GitHubRepoData | null> {
+  if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(name)) return null;
   try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${name}`, {
+    const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, {
       headers: {
         Accept: "application/vnd.github.v3+json",
         "User-Agent": "PimpMyGit",

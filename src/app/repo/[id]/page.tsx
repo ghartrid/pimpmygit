@@ -6,7 +6,7 @@ import { useSession, signIn } from "next-auth/react";
 import { VoteButton } from "@/components/VoteButton";
 import { CommentSection } from "@/components/CommentSection";
 import { ShareButtons } from "@/components/ShareButtons";
-import { useRouter } from "next/navigation";
+
 
 interface RepoData {
   id: number;
@@ -30,7 +30,6 @@ export default function RepoPage({ params }: { params: Promise<{ id: string }> }
   const { id } = use(params);
   const { data: session, status } = useSession();
   const ext = session as Record<string, unknown> | null;
-  const router = useRouter();
   const [repo, setRepo] = useState<RepoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [boosting, setBoosting] = useState(false);
@@ -41,10 +40,10 @@ export default function RepoPage({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => {
     async function load() {
-      const res = await fetch(`/api/repos?search=&limit=100`);
+      const res = await fetch(`/api/repos/${id}`);
+      if (!res.ok) { setRepo(null); setLoading(false); return; }
       const data = await res.json();
-      const found = data.repos?.find((r: RepoData) => r.id === parseInt(id));
-      setRepo(found || null);
+      setRepo(data.repo || null);
       setLoading(false);
     }
     load();
@@ -93,11 +92,11 @@ export default function RepoPage({ params }: { params: Promise<{ id: string }> }
       const data = await res.json();
       if (res.ok) {
         setBoostMsg(`Boosted! You have ${data.credits} credits remaining.`);
-        router.refresh();
-        const res2 = await fetch(`/api/repos?search=&limit=100`);
-        const data2 = await res2.json();
-        const found = data2.repos?.find((r: RepoData) => r.id === parseInt(id));
-        if (found) setRepo(found);
+        const res2 = await fetch(`/api/repos/${id}`);
+        if (res2.ok) {
+          const data2 = await res2.json();
+          if (data2.repo) setRepo(data2.repo);
+        }
       } else {
         setBoostMsg(data.error || "Failed to boost");
       }

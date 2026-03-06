@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllRepos, updateRepoStats } from "@/lib/db";
 import { fetchRepoData } from "@/lib/github";
+import { checkAdminAuth } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  const token = process.env.ADMIN_TOKEN;
-  if (!token || auth !== `Bearer ${token}`) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

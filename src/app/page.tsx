@@ -11,11 +11,17 @@ export default function Home() {
   const [sponsored, setSponsored] = useState<RepoCardData[]>([]);
   const [sort, setSort] = useState<SortMode>("trending");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     fetch("/api/sponsored")
@@ -32,7 +38,7 @@ export default function Home() {
       offsetRef.current = 0;
     }
     const params = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: String(offsetRef.current) });
-    if (search) params.set("search", search);
+    if (debouncedSearch) params.set("search", debouncedSearch);
     const res = await fetch(`/api/repos?${params}`);
     const data = await res.json();
     const newRepos = data.repos || [];
@@ -45,7 +51,7 @@ export default function Home() {
     offsetRef.current += newRepos.length;
     setLoading(false);
     setLoadingMore(false);
-  }, [sort, search]);
+  }, [sort, debouncedSearch]);
 
   useEffect(() => {
     setHasMore(true);
